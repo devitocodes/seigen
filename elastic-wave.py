@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from dolfin import *
+from firedrake import *
 import os
 
 # PETSc environment variables
@@ -14,12 +14,13 @@ except KeyError:
    os.environ["PETSC_OPTIONS"] = "-log_summary"
    
 parameters['form_compiler']['quadrature_degree'] = 4
+parameters["coffee"]["O2"] = False
 
 mesh = UnitSquareMesh(20, 20, 'crossed')
 
 S = TensorFunctionSpace(mesh, "CG", 1)
 U = VectorFunctionSpace(mesh, "CG", 1)
-dimension = len(U.split())
+dimension = 2
 
 v = TestFunction(S)
 w = TestFunction(U)
@@ -43,7 +44,7 @@ Vs = sqrt(mu/density) # S-wave velocity
 
 # Weak forms
 F_u = density*inner(w, (u - u0)/dt)*dx + inner(grad(w), s0)*dx
-F_s = inner(v, (s - s0)/dt)*dx - inner(v, l*(div(u0))*Identity(dimension))*dx - inner(v, mu*(grad(u1) + grad(u1).T))*dx
+F_s = inner(v, (s - s0)/dt)*dx - inner(v, l*(div(u1))*Identity(dimension))*dx - inner(v, mu*(grad(u1) + grad(u1).T))*dx
 
 problem_u = LinearVariationalProblem(lhs(F_u), rhs(F_u), u1)
 solver_u = LinearVariationalSolver(problem_u)
@@ -58,15 +59,15 @@ output_s = File("stress.pvd")
 a = sqrt(2)*pi*Vs
 b = 2*pi*mu
 uic = Expression(('a*cos(pi*x[0])*sin(pi*x[1])*cos(a*t)','-a*sin(pi*x[0])*cos(pi*x[1])*cos(a*t)'), a=a, t=0)
-u0.assign(uic)
+u0.assign(Function(U).interpolate(uic))
 sic = Expression((('-b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)','0'),
                    ('0','b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)')), a=a, b=b, t=dt/2.0)
-s0.assign(sic)
+s0.assign(Function(S).interpolate(sic))
 
 
-uexact = project(Expression(('a*cos(pi*x[0])*sin(pi*x[1])*cos(a*t)','-a*sin(pi*x[0])*cos(pi*x[1])*cos(a*t)'), a=a, t=5), U)
-sexact = project(Expression((('-b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)','0'),
-                   ('0','b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)')), a=a, b=b, t=5+dt/2.0), S)
+uexact = Function(U).interpolate(Expression(('a*cos(pi*x[0])*sin(pi*x[1])*cos(a*t)','-a*sin(pi*x[0])*cos(pi*x[1])*cos(a*t)'), a=a, t=5))
+sexact = Function(S).interpolate(Expression((('-b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)','0'),
+                   ('0','b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)')), a=a, b=b, t=5+dt/2.0))
 
 t = dt
 temp = Function(U)
@@ -87,7 +88,7 @@ while t <= T + 1e-12:
    #G = inner(w, u)*dx - inner(w, u1-uexact)*dx
    #solve(lhs(G) == rhs(G), temp)
 
-   #output_u << u1
+   output_u << u1
    #output_s << s1
    
    print "|u-uexact| = %f" % errornorm(u1, uexact)
