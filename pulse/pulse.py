@@ -37,7 +37,7 @@ u1 = Function(U)
 # Constants
 density = 1.0
 T = 2.0
-dt = 0.001
+dt = 0.0025
 mu = 0.25
 l = 0.5
 
