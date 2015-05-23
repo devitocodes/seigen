@@ -16,10 +16,10 @@ except KeyError:
 parameters['form_compiler']['quadrature_degree'] = 4
 parameters["coffee"]["O2"] = False
 
-mesh = UnitSquareMesh(5, 5)
+mesh = UnitSquareMesh(20, 20)
 
 S = FunctionSpace(mesh, "DG", 1)
-U = FunctionSpace(mesh, "CG", 1)
+U = FunctionSpace(mesh, "DG", 1)
 dimension = 2
 
 WS = MixedFunctionSpace([S, S, S, S])
@@ -40,7 +40,7 @@ u1 = Function(WU)
 # Constants
 density = 1.0
 T = 1.0
-dt = 0.04
+dt = 0.01
 mu = 0.25
 l = 0.5
 
@@ -55,16 +55,43 @@ n = FacetNormal(mesh)
 
 F_u = density*inner(w[0], (u[0] - u0[0])/dt)*dx \
       + inner(grad(w[0])[0], s0[0])*dx - inner(avg(s0[0]), jump(w[0], n[0]))*dS \
-      + inner(grad(w[0])[1], s0[1])*dx - inner(avg(s0[1]), jump(w[0], n[0]))*dS
+      + inner(grad(w[0])[1], s0[1])*dx - inner(avg(s0[1]), jump(w[0], n[1]))*dS
 
 F_u += density*inner(w[1], (u[1] - u0[1])/dt)*dx \
-       + inner(grad(w[1])[0], s0[2])*dx - inner(avg(s0[2]), jump(w[1], n[1]))*dS \
+       + inner(grad(w[1])[0], s0[2])*dx - inner(avg(s0[2]), jump(w[1], n[0]))*dS \
        + inner(grad(w[1])[1], s0[3])*dx - inner(avg(s0[3]), jump(w[1], n[1]))*dS \
 
-F_s = inner(v[0], (s[0] - s0[0])/dt)*dx - (l + 2*mu)*inner(v[0], grad(u1[0])[0])*dx - l*inner(v[0], grad(u1[1])[1])*dx
-F_s += inner(v[1], (s[1] - s0[1])/dt)*dx - mu*(inner(v[1], grad(u1[1])[0] + grad(u1[0])[1]))*dx
-F_s += inner(v[2], (s[2] - s0[2])/dt)*dx - mu*(inner(v[2], grad(u1[1])[0] + grad(u1[0])[1]))*dx
-F_s += inner(v[3], (s[3] - s0[3])/dt)*dx - l*inner(v[3], grad(u1[0])[0])*dx - (l + 2*mu)*inner(v[3], grad(u1[1])[1])*dx
+F_s = inner(v[0], (s[0] - s0[0])/dt)*dx \
+      + (l + 2*mu)*inner(grad(v[0])[0], u1[0])*dx \
+      - (l + 2*mu)*inner(jump(v[0], n[0]), avg(u1[0]))*dS \
+      - (l + 2*mu)*inner(v[0], u1[0]*n[0])*ds \
+      + l*inner(grad(v[0])[1], u1[1])*dx \
+      - l*inner(jump(v[0], n[1]), avg(u1[1]))*dS \
+      - l*inner(v[0], u1[1]*n[1])*ds
+
+F_s += inner(v[1], (s[1] - s0[1])/dt)*dx \
+       + mu*(inner(grad(v[1])[0], u1[1]))*dx \
+       - mu*(inner(v[1], u1[1]*n[0]))*ds \
+       - mu*(inner(jump(v[1], n[0]), avg(u1[1])))*dS \
+       + mu*(inner(grad(v[1])[1], u1[0]))*dx \
+       - mu*(inner(v[1], u1[0]*n[1]))*ds \
+       - mu*(inner(jump(v[1], n[1]), avg(u1[0])))*dS \
+
+F_s += inner(v[2], (s[2] - s0[2])/dt)*dx \
+       + mu*(inner(grad(v[2])[0], u1[1]))*dx \
+       - mu*(inner(v[2], u1[1]*n[0]))*ds \
+       - mu*(inner(jump(v[2], n[0]), avg(u1[1])))*dS \
+       + mu*(inner(grad(v[2])[1], u1[0]))*dx \
+       - mu*(inner(v[2], u1[0]*n[1]))*ds \
+       - mu*(inner(jump(v[2], n[1]), avg(u1[0])))*dS \
+
+F_s += inner(v[3], (s[3] - s0[3])/dt)*dx \
+       + l*inner(grad(v[3])[0], u1[0])*dx \
+       - l*inner(v[3], u1[0]*n[0])*ds \
+       - l*inner(jump(v[3], n[0]), avg(u1[0]))*dS \
+       + (l + 2*mu)*inner(grad(v[3])[1], u1[1])*dx \
+       - (l + 2*mu)*inner(jump(v[3], n[1]), avg(u1[1]))*dS \
+       - (l + 2*mu)*inner(v[3], u1[1]*n[1])*ds \
 
 problem_u = LinearVariationalProblem(lhs(F_u), rhs(F_u), u1)
 solver_u = LinearVariationalSolver(problem_u)
