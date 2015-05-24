@@ -18,11 +18,11 @@ v = TestFunctions(WS)
 u = TrialFunctions(WU)
 w = TestFunctions(WU)
 
-s0 = Function(WS)
-s1 = Function(WS)
+s0 = Function(WS, name="StressOld")
+s1 = Function(WS, name="StressNew")
 
-u0 = Function(WU)
-u1 = Function(WU)
+u0 = Function(WU, name="VelocityOld")
+u1 = Function(WU, name="VelocityNew")
 
 # Constants
 density = 1.0
@@ -102,6 +102,9 @@ sic = Expression((('0','0'),
                   ('0','0')))
 s0.assign(Function(WS).interpolate(sic))
 
+output_u << u1
+output_s << s1.split()[0]
+   
 t = dt
 while t <= T + 1e-12:
    print "t = %f" % t
@@ -115,10 +118,10 @@ while t <= T + 1e-12:
    # Solve for the stress tensor
    solver_s.solve()
    s0.assign(s1)
-   
-   # Move onto next timestep
-   t += dt
 
    output_u << u1
    output_s << s1.split()[0]
+   
+   # Move onto next timestep
+   t += dt
 
