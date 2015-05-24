@@ -39,7 +39,7 @@ u1 = Function(WU)
 
 # Constants
 density = 1.0
-T = 1.0
+T = 5.0
 dt = 0.01
 mu = 0.25
 l = 0.5
@@ -112,9 +112,9 @@ sic = Expression((('-b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)','0'),
 s0.assign(Function(WS).interpolate(sic))
 
 
-uexact = Function(WU).interpolate(Expression(('a*cos(pi*x[0])*sin(pi*x[1])*cos(a*t)','-a*sin(pi*x[0])*cos(pi*x[1])*cos(a*t)'), a=a, t=1))
+uexact = Function(WU).interpolate(Expression(('a*cos(pi*x[0])*sin(pi*x[1])*cos(a*t)','-a*sin(pi*x[0])*cos(pi*x[1])*cos(a*t)'), a=a, t=5))
 sexact = Function(WS).interpolate(Expression((('-b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)','0'),
-                   ('0','b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)')), a=a, b=b, t=1+dt/2.0))
+                   ('0','b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)')), a=a, b=b, t=5+dt/2.0))
 
 t = dt
 temp = Function(U)
