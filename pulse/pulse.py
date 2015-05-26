@@ -97,8 +97,9 @@ sic = Expression((('-exp(-50*pow((x[0]-1), 2))', '0'),
                    ('0', '0')))
 s0.assign(Function(WS).interpolate(sic))
 
-t = dt
-while t <= T + 1e-12:
+t = 0
+while t < T:
+   t += dt
    print "t = %f" % t
    
    # Solve for the velocity vector
@@ -108,9 +109,6 @@ while t <= T + 1e-12:
    # Solve for the stress tensor
    solver_s.solve()
    s0.assign(s1)
-   
-   # Move onto next timestep
-   t += dt
    
    #G = inner(w, u)*dx - inner(w, u1-uexact)*dx
    #solve(lhs(G) == rhs(G), temp)

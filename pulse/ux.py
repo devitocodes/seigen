@@ -39,7 +39,7 @@ dt = 0.0014
 times = [0.25, 1.0, 2.0]
 
 for t in times:
-   index = ceil(t/dt)
+   index = int(t/dt)
    f = vtktools.vtu('velocity_%d.vtu' % index)
    f.GetFieldNames()
    for i in range(len(x_array)):
@@ -51,7 +51,7 @@ for t in times:
    plt.plot(x_array, ux_array, 'k-', label=r"$\Delta x = %.2f\ \mathrm{m}$" % dx)
    plt.plot(x_array, ux_error_array, 'r-', label=r"$10 \times \epsilon$")
    
-   plt.legend()
+   plt.legend(loc=2)
    plt.xlabel(r"$x$ (m)")
    plt.ylabel(r"$x$-component of velocity (ms$^{-1}$)")
    plt.axis([0, 4, -0.1, 1.1])
