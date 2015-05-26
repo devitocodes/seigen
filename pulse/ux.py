@@ -1,10 +1,7 @@
-import os
 import numpy
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mtick
 import vtktools
-plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
-from math import exp
+from math import exp, ceil
 
 def V_p():
    return 1.0
@@ -42,7 +39,7 @@ dt = 0.0014
 times = [0.25, 1.0, 2.0]
 
 for t in times:
-   index = int(t/dt)
+   index = ceil(t/dt)
    f = vtktools.vtu('velocity_%d.vtu' % index)
    f.GetFieldNames()
    for i in range(len(x_array)):
@@ -59,5 +56,5 @@ for t in times:
    plt.ylabel(r"$x$-component of velocity (ms$^{-1}$)")
    plt.axis([0, 4, -0.1, 1.1])
    plt.grid("on")
-   plt.savefig("ux_%f.pdf" % t)
+   plt.savefig("ux_%.2f.pdf" % t)
 
