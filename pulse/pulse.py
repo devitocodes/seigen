@@ -38,16 +38,16 @@ Vp = sqrt((l + 2*mu)/density) # P-wave velocity
 Vs = sqrt(mu/density) # S-wave velocity
 
 n = FacetNormal(mesh)
-absorption = Function(U).interpolate(Expression("x[0] <= 3.5 && x[0] >= 0.5 && x[1] >= 0.0 && x[1] <= 1.0 ? 0 : 1.0"))
+absorption = Function(U).interpolate(Expression("x[0] >= 3.5 || x[0] <= 0.5 ? 100.0 : 0"))
 
 # Weak forms
 F_u = density*inner(w[0], (u[0] - u0[0])/dt)*dx \
-      + inner(grad(w[0])[0], s0[0])*dx - inner(avg(s0[0]), jump(w[0], n[0]))*dS - inner(s0[0], w[0]*n[0])*ds - inner(w[0], absorption*u[0])*dx \
+      + inner(grad(w[0])[0], s0[0])*dx - inner(avg(s0[0]), jump(w[0], n[0]))*dS - inner(s0[0], w[0]*n[0])*ds + inner(w[0], absorption*u[0])*dx \
       + inner(grad(w[0])[1], s0[1])*dx - inner(avg(s0[1]), jump(w[0], n[1]))*dS - inner(s0[1], w[0]*n[1])*ds
 
 #F_u += density*inner(w[1], (u[1] - u0[1])/dt)*dx \
 #       + inner(grad(w[1])[0], s0[2])*dx - inner(avg(s0[2]), jump(w[1], n[0]))*dS - inner(s0[2], w[1]*n[0])*ds \
-#       + inner(grad(w[1])[1], s0[3])*dx - inner(avg(s0[3]), jump(w[1], n[1]))*dS - inner(s0[3], w[1]*n[1])*ds - inner(w[1], absorption*u[1])*dx
+#       + inner(grad(w[1])[1], s0[3])*dx - inner(avg(s0[3]), jump(w[1], n[1]))*dS - inner(s0[3], w[1]*n[1])*ds + inner(w[1], absorption*u[1])*dx
 
 F_s = inner(v[0], (s[0] - s0[0])/dt)*dx \
       + (l + 2*mu)*inner(grad(v[0])[0], u1[0])*dx \
