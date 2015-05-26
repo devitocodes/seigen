@@ -21,11 +21,11 @@ v = TestFunctions(WS)
 u = TrialFunctions(WU)
 w = TestFunctions(WU)
 
-s0 = Function(WS)
-s1 = Function(WS)
+s0 = Function(WS, name="StressOld")
+s1 = Function(WS, name="StressNew")
 
-u0 = Function(WU)
-u1 = Function(WU)
+u0 = Function(WU, name="VelocityOld")
+u1 = Function(WU, name="VelocityNew")
 
 # Constants
 density = 1.0
