@@ -27,7 +27,7 @@ u1 = Function(WU, name="VelocityNew")
 # Constants
 density = 1.0
 T = 2.5
-dt = 0.0025
+dt = 0.001
 mu = 3600.0
 l = 3599.3664
 
@@ -43,7 +43,7 @@ HU = FunctionSpace(mesh, "DG", 4)
 source = Function(HU)
 source.interpolate(source_expression)
 
-absorption = Function(U).interpolate(Expression("x[0] <= 20 || x[0] >= 280 || x[1] <= 20.0 ? 10 : 0"))
+absorption = Function(U).interpolate(Expression("x[0] <= 20 || x[0] >= 280 || x[1] <= 20.0 ? 1000 : 0"))
 
 # Weak forms
 F_u = density*inner(w[0], (u[0] - u0[0])/dt)*dx \
@@ -120,7 +120,7 @@ while t <= T + 1e-12:
    s0.assign(s1)
 
    output_u << u1
-   output_s << s1.split()[0]
+   #output_s << s1.split()[0]
    
    # Move onto next timestep
    t += dt
