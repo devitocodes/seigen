@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from firedrake import *
-import pylab
+
 def run(N, degree, dt):
    mesh = UnitSquareMesh(N, N)
 
@@ -153,13 +153,6 @@ def convergence_analysis():
          uy_errors.append(uy_error)
          f.write(str(dx[i]) + "\t" + str(dt[i]) + "\t" + str(ux_error) + "\t" + str(uy_error) + "\n")
       f.close()
-
-      pylab.figure()
-      pylab.loglog(dx, ux_errors, 'g--o', label="Velocity, P%d" % d)
-      pylab.legend(loc='best')
-      pylab.xlabel("Characteristic element length")
-      pylab.ylabel("Error in L2 norm")
-      pylab.savefig("error_u_p%d.png" % d)
       
    return
    
