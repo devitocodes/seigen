@@ -131,27 +131,39 @@ def run(N, degree, dt):
    G = inner(temp_test, temp_trial)*dx - inner(temp_test, abs(u1.split()[1]-uexact.split()[1]))*dx
    solve(lhs(G) == rhs(G), temp)
    uy_error = norm(temp)
+
+   G = inner(temp_test, temp_trial)*dx - inner(temp_test, abs(s1.split()[0]-sexact.split()[0]))*dx
+   solve(lhs(G) == rhs(G), temp)
+   sxx_error = norm(temp)
+
+   G = inner(temp_test, temp_trial)*dx - inner(temp_test, abs(s1.split()[1]-sexact.split()[1]))*dx
+   solve(lhs(G) == rhs(G), temp)
+   sxy_error = norm(temp)
+
+   G = inner(temp_test, temp_trial)*dx - inner(temp_test, abs(s1.split()[2]-sexact.split()[2]))*dx
+   solve(lhs(G) == rhs(G), temp)
+   syx_error = norm(temp)
+
+   G = inner(temp_test, temp_trial)*dx - inner(temp_test, abs(s1.split()[3]-sexact.split()[3]))*dx
+   solve(lhs(G) == rhs(G), temp)
+   syy_error = norm(temp)
    
-   return ux_error, uy_error
+   return ux_error, uy_error, sxx_error, sxy_error, syx_error, syy_error
 
 def convergence_analysis():
    degrees = range(1, 5)
-   N = [2**i for i in range(2, 7)]
+   N = [2**i for i in range(2, 6)]
    
    dx = [1.0/n for n in N]  
    
    for d in degrees:
       dt = [0.25*(1.0/n)/(2.0**(d-1)) for n in N] # Courant number of 0.25: (dx*C)/Vp
-      ux_errors = []
-      uy_errors = []
       
-      f = open("error_u_p%d.dat" % d, "w")
-      f.write("dx\tdt\tux_error\tuy_error\n")
+      f = open("error_p%d_lf2.dat" % d, "w")
+      f.write("dx\tdt\tux_error\tuy_error\tsxx_error\tsxy_error\tsyx_error\tsyy_error\n")
       for i in range(len(N)):
-         ux_error, uy_error = run(N[i], d, dt[i])
-         ux_errors.append(ux_error)
-         uy_errors.append(uy_error)
-         f.write(str(dx[i]) + "\t" + str(dt[i]) + "\t" + str(ux_error) + "\t" + str(uy_error) + "\n")
+         ux_error, uy_error, sxx_error, sxy_error, syx_error, syy_error = run(N[i], d, dt[i])
+         f.write(str(dx[i]) + "\t" + str(dt[i]) + "\t" + str(ux_error) + "\t" + str(uy_error) + "\t" + str(sxx_error) + "\t" + str(sxy_error) + "\t" + str(syx_error) + "\t" + str(syy_error) + "\n")
       f.close()
       
    return

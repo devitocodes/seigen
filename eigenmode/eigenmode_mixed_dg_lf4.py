@@ -217,9 +217,9 @@ def convergence_analysis():
    dx = [1.0/n for n in N]  
    
    for d in degrees:
-      dt = [0.5*(1.0/n)/(2.0**(d-1)) for n in N] # Courant number of 0.25: (dx*C)/Vp
+      dt = [0.5*(1.0/n)/(2.0**(d-1)) for n in N] # Courant number of 0.5: (dx*C)/Vp
       
-      f = open("error_u_p%d_lf4.dat" % d, "w")
+      f = open("error_p%d_lf4.dat" % d, "w")
       f.write("dx\tdt\tux_error\tuy_error\tsxx_error\tsxy_error\tsyx_error\tsyy_error\n")
       for i in range(len(N)):
          ux_error, uy_error, sxx_error, sxy_error, syx_error, syy_error = run(N[i], d, dt[i])

@@ -3,7 +3,7 @@ import pylab
 degrees = range(1, 5)
 
 for d in degrees:
-   f = open("error_u_p%d_lf4.dat" % d, "r")
+   f = open("error_p%d_lf4.dat" % d, "r")
    f.readline() # Skip the header
    dx = []
    ux_error = []
