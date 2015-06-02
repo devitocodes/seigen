@@ -5,7 +5,7 @@ from elastic_wave.elastic import *
 from elastic_wave.helpers import *
 
 mesh = Mesh("src/domain.msh")
-elastic = ElasticLF4(mesh, "DG", 1)
+elastic = ElasticLF4(mesh, "DG", 1, dimension=2)
 
 # Constants
 elastic.density = 1.0
