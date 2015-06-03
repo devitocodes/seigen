@@ -21,7 +21,7 @@ class ElasticLF4(object):
    """ Elastic wave equation solver using the finite element method and a fourth-order leap-frog time-stepping scheme. """
 
    def __init__(self, mesh, family, degree, dimension):
-      with timed_region('setup'):
+      with timed_region('function setup'):
          self.mesh = mesh
          self.dimension = dimension
 
@@ -57,7 +57,8 @@ class ElasticLF4(object):
          self._l = None
          
          self.n = FacetNormal(self.mesh)
-         
+
+      with timed_region('i/o'):
          # File output streams
          self.u_stream = File("velocity.pvd")
          self.s_stream = File("stress.pvd")
@@ -268,7 +269,7 @@ class ElasticLF4(object):
       self.write(self.u1, self.s1.split()[0]) # Write out the initial condition.
       
       # Construct the solver objects outside of the time-stepping loop.
-      with timed_region('setup'):
+      with timed_region('solver setup'):
          solver_uh1 = self.solver_uh1
          solver_stemp = self.solver_stemp
          solver_uh2 = self.solver_uh2
@@ -285,8 +286,9 @@ class ElasticLF4(object):
             
             # In case the source is time-dependent, update the time 't' here.
             if(self.source):
-               self.source_expression.t = t
-               self.source = self.source_expression
+               with timed_region('source term update'):
+                  self.source_expression.t = t
+                  self.source = self.source_expression
             
             # Solve for the velocity vector field.
             with timed_region('velocity solve'):
@@ -310,5 +312,4 @@ class ElasticLF4(object):
             # Move onto next timestep
             t += self.dt
       
-      summary()
       return self.u1, self.s1

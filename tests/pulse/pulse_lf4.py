@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 
-from firedrake import *
-import numpy
 from elastic_wave.elastic import *
 from elastic_wave.helpers import *
+from firedrake import *
+import numpy
+from pyop2.profiling import timed_region
 
 Lx = 4.0
 Ly = 1.0
 h = 1e-2
-mesh = RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
+with timed_region('mesh generation'):
+   mesh = RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
 elastic = ElasticLF4(mesh, "DG", 1, dimension=1)
 
 # Constants
