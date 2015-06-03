@@ -1,50 +1,66 @@
 #!/usr/bin/env python
 
+# PETSc environment variables
+import os
+try:
+   if(os.environ["PETSC_OPTIONS"] == ""):
+      os.environ["PETSC_OPTIONS"] = "-log_summary"
+   else:
+      os.environ["PETSC_OPTIONS"] = os.environ["PETSC_OPTIONS"] + " -log_summary"
+except KeyError:
+   # Environment variable does not exist, so let's set it now.
+   os.environ["PETSC_OPTIONS"] = "-log_summary"
+print "Environment variable PETSC_OPTIONS set to: %s" % (os.environ["PETSC_OPTIONS"])
+
+from pyop2 import *
+from pyop2.profiling import timed_region, summary
+op2.init(lazy_evaluation=False)
 from firedrake import *
 
 class ElasticLF4(object):
    """ Elastic wave equation solver using the finite element method and a fourth-order leap-frog time-stepping scheme. """
 
    def __init__(self, mesh, family, degree, dimension):
-      self.mesh = mesh
-      self.dimension = dimension
+      with timed_region('setup'):
+         self.mesh = mesh
+         self.dimension = dimension
 
-      self.S = FunctionSpace(mesh, family, degree)
-      self.U = FunctionSpace(mesh, family, degree)
+         self.S = FunctionSpace(mesh, family, degree)
+         self.U = FunctionSpace(mesh, family, degree)
 
-      self.WS = MixedFunctionSpace([self.S, self.S, self.S, self.S])
-      self.WU = MixedFunctionSpace([self.U, self.U])
+         self.WS = MixedFunctionSpace([self.S, self.S, self.S, self.S])
+         self.WU = MixedFunctionSpace([self.U, self.U])
 
-      self.s = TrialFunctions(self.WS)
-      self.v = TestFunctions(self.WS)
-      self.u = TrialFunctions(self.WU)
-      self.w = TestFunctions(self.WU)
+         self.s = TrialFunctions(self.WS)
+         self.v = TestFunctions(self.WS)
+         self.u = TrialFunctions(self.WU)
+         self.w = TestFunctions(self.WU)
 
-      self.s0 = Function(self.WS, name="StressOld")
-      self.sh1 = Function(self.WS, name="StressHalf1")
-      self.stemp = Function(self.WS, name="StressTemp")
-      self.sh2 = Function(self.WS, name="StressHalf2")
-      self.s1 = Function(self.WS, name="StressNew")
+         self.s0 = Function(self.WS, name="StressOld")
+         self.sh1 = Function(self.WS, name="StressHalf1")
+         self.stemp = Function(self.WS, name="StressTemp")
+         self.sh2 = Function(self.WS, name="StressHalf2")
+         self.s1 = Function(self.WS, name="StressNew")
 
-      self.u0 = Function(self.WU, name="VelocityOld")
-      self.uh1 = Function(self.WU, name="VelocityHalf1")
-      self.utemp = Function(self.WU, name="VelocityTemp")
-      self.uh2 = Function(self.WU, name="VelocityHalf2")
-      self.u1 = Function(self.WU, name="VelocityNew")
-      
-      self.absorption_function = None
-      self.source_function = None
-      self.source_expression = None
-      self._dt = None
-      self._density = None
-      self._mu = None
-      self._l = None
-      
-      self.n = FacetNormal(self.mesh)
-      
-      # File output streams
-      self.u_stream = File("velocity.pvd")
-      self.s_stream = File("stress.pvd")
+         self.u0 = Function(self.WU, name="VelocityOld")
+         self.uh1 = Function(self.WU, name="VelocityHalf1")
+         self.utemp = Function(self.WU, name="VelocityTemp")
+         self.uh2 = Function(self.WU, name="VelocityHalf2")
+         self.u1 = Function(self.WU, name="VelocityNew")
+         
+         self.absorption_function = None
+         self.source_function = None
+         self.source_expression = None
+         self._dt = None
+         self._density = None
+         self._mu = None
+         self._l = None
+         
+         self.n = FacetNormal(self.mesh)
+         
+         # File output streams
+         self.u_stream = File("velocity.pvd")
+         self.s_stream = File("stress.pvd")
       
    @property
    def absorption(self):
@@ -241,52 +257,58 @@ class ElasticLF4(object):
 
    def write(self, u=None, s=None):
       """ Write the velocity and/or stress fields to file. """
-      if(u):
-         self.u_stream << u
-      if(s):
-         self.s_stream << s
+      with timed_region('i/o'):
+         if(u):
+            self.u_stream << u
+         if(s):
+            self.s_stream << s
 
    def run(self, T):
       """ Run the elastic wave simulation until t = T. """
       self.write(self.u1, self.s1.split()[0]) # Write out the initial condition.
       
       # Construct the solver objects outside of the time-stepping loop.
-      solver_uh1 = self.solver_uh1
-      solver_stemp = self.solver_stemp
-      solver_uh2 = self.solver_uh2
-      solver_u1 = self.solver_u1
-      solver_sh1 = self.solver_sh1
-      solver_utemp = self.solver_utemp
-      solver_sh2 = self.solver_sh2
-      solver_s1 = self.solver_s1
+      with timed_region('setup'):
+         solver_uh1 = self.solver_uh1
+         solver_stemp = self.solver_stemp
+         solver_uh2 = self.solver_uh2
+         solver_u1 = self.solver_u1
+         solver_sh1 = self.solver_sh1
+         solver_utemp = self.solver_utemp
+         solver_sh2 = self.solver_sh2
+         solver_s1 = self.solver_s1
       
-      t = self.dt
-      while t <= T + 1e-12:
-         print "t = %f" % t
-         
-         # In case the source is time-dependent, update the time 't' here.
-         if(self.source):
-            self.source_expression.t = t
-            self.source = self.source_expression
-         
-         # Solve for the velocity vector field.
-         solver_uh1.solve()
-         solver_stemp.solve()
-         solver_uh2.solve()
-         solver_u1.solve()
-         self.u0.assign(self.u1)
-         
-         # Solve for the stress tensor field.
-         solver_sh1.solve()
-         solver_utemp.solve()
-         solver_sh2.solve()
-         solver_s1.solve()
-         self.s0.assign(self.s1)
-         
-         # Write out the new fields
-         #self.write(self.u1, self.s1.split()[0])
-         
-         # Move onto next timestep
-         t += self.dt
+      with timed_region('timestepping'):
+         t = self.dt
+         while t <= T + 1e-12:
+            print "t = %f" % t
+            
+            # In case the source is time-dependent, update the time 't' here.
+            if(self.source):
+               self.source_expression.t = t
+               self.source = self.source_expression
+            
+            # Solve for the velocity vector field.
+            with timed_region('velocity solve'):
+               solver_uh1.solve()
+               solver_stemp.solve()
+               solver_uh2.solve()
+               solver_u1.solve()
+               self.u0.assign(self.u1)
+            
+            # Solve for the stress tensor field.
+            with timed_region('stress solve'):
+               solver_sh1.solve()
+               solver_utemp.solve()
+               solver_sh2.solve()
+               solver_s1.solve()
+               self.s0.assign(self.s1)
+            
+            # Write out the new fields
+            self.write(self.u1, self.s1.split()[0])
+            
+            # Move onto next timestep
+            t += self.dt
       
+      summary()
       return self.u1, self.s1
