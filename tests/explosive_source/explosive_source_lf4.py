@@ -4,7 +4,11 @@ from firedrake import *
 from elastic_wave.elastic import *
 from elastic_wave.helpers import *
 
-mesh = Mesh("src/domain.msh")
+Lx = 300.0
+Ly = 100.0
+h = 0.1
+with timed_region('mesh generation'):
+   mesh = RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
 elastic = ElasticLF4(mesh, "DG", 1, dimension=2)
 
 # Constants
@@ -35,5 +39,5 @@ sic = Expression((('0','0'),
 elastic.s0.assign(Function(elastic.WS).interpolate(sic))
 
 # Start the simulation
-T = 2.5
+T = 2.5 # If you just want to run 10 time-steps, use T = elastic.dt*10.0
 elastic.run(T)

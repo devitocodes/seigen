@@ -16,6 +16,7 @@ from pyop2 import *
 from pyop2.profiling import timed_region, summary
 op2.init(lazy_evaluation=False)
 from firedrake import *
+import mpi4py
 
 class ElasticLF4(object):
    """ Elastic wave equation solver using the finite element method and a fourth-order leap-frog time-stepping scheme. """
@@ -27,6 +28,8 @@ class ElasticLF4(object):
 
          self.S = FunctionSpace(mesh, family, degree)
          self.U = FunctionSpace(mesh, family, degree)
+         # Assumes that the S and U function spaces are the same.
+         print "Number of degrees of freedom: %d" % op2.MPI.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
 
          self.WS = MixedFunctionSpace([self.S, self.S, self.S, self.S])
          self.WU = MixedFunctionSpace([self.U, self.U])
