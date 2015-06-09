@@ -26,30 +26,27 @@ class ElasticLF4(object):
          self.mesh = mesh
          self.dimension = dimension
 
-         self.S = FunctionSpace(mesh, family, degree)
-         self.U = FunctionSpace(mesh, family, degree)
+         self.S = TensorFunctionSpace(mesh, family, degree)
+         self.U = VectorFunctionSpace(mesh, family, degree)
          # Assumes that the S and U function spaces are the same.
          print "Number of degrees of freedom: %d" % op2.MPI.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
 
-         self.WS = MixedFunctionSpace([self.S, self.S, self.S, self.S])
-         self.WU = MixedFunctionSpace([self.U, self.U])
+         self.s = TrialFunction(self.S)
+         self.v = TestFunction(self.S)
+         self.u = TrialFunction(self.U)
+         self.w = TestFunction(self.U)
 
-         self.s = TrialFunctions(self.WS)
-         self.v = TestFunctions(self.WS)
-         self.u = TrialFunctions(self.WU)
-         self.w = TestFunctions(self.WU)
+         self.s0 = Function(self.S, name="StressOld")
+         self.sh1 = Function(self.S, name="StressHalf1")
+         self.stemp = Function(self.S, name="StressTemp")
+         self.sh2 = Function(self.S, name="StressHalf2")
+         self.s1 = Function(self.S, name="StressNew")
 
-         self.s0 = Function(self.WS, name="StressOld")
-         self.sh1 = Function(self.WS, name="StressHalf1")
-         self.stemp = Function(self.WS, name="StressTemp")
-         self.sh2 = Function(self.WS, name="StressHalf2")
-         self.s1 = Function(self.WS, name="StressNew")
-
-         self.u0 = Function(self.WU, name="VelocityOld")
-         self.uh1 = Function(self.WU, name="VelocityHalf1")
-         self.utemp = Function(self.WU, name="VelocityTemp")
-         self.uh2 = Function(self.WU, name="VelocityHalf2")
-         self.u1 = Function(self.WU, name="VelocityNew")
+         self.u0 = Function(self.U, name="VelocityOld")
+         self.uh1 = Function(self.U, name="VelocityHalf1")
+         self.utemp = Function(self.U, name="VelocityTemp")
+         self.uh2 = Function(self.U, name="VelocityHalf2")
+         self.u1 = Function(self.U, name="VelocityNew")
          
          self.absorption_function = None
          self.source_function = None
@@ -60,6 +57,7 @@ class ElasticLF4(object):
          self._l = None
          
          self.n = FacetNormal(self.mesh)
+         self.I = Identity(self.dimension)
 
       with timed_region('i/o'):
          # File output streams
@@ -83,9 +81,7 @@ class ElasticLF4(object):
    @property
    def form_uh1(self):
       """ UFL for uh1 equation. """
-      F = inner(self.w[0], self.u[0])*dx - self.fx(self.w, self.s0, self.u0, self.n, self.absorption)
-      if(self.dimension == 2):
-         F += inner(self.w[1], self.u[1])*dx - self.fy(self.w, self.s0, self.u0, self.n, self.absorption)
+      F = inner(self.w, self.u)*dx - self.f(self.w, self.s0, self.u0, self.n, self.absorption)
       return F
    @property
    def solver_uh1(self):
@@ -97,11 +93,7 @@ class ElasticLF4(object):
    @property
    def form_stemp(self):
       """ UFL for stemp equation. """
-      F = inner(self.v[0], self.s[0])*dx - self.gxx(self.v, self.uh1, self.n, self.l, self.mu, self.source)
-      if(self.dimension == 2):
-         F += inner(self.v[1], self.s[1])*dx - self.gxy(self.v, self.uh1, self.n, self.l, self.mu)
-         F += inner(self.v[2], self.s[2])*dx - self.gyx(self.v, self.uh1, self.n, self.l, self.mu)
-         F += inner(self.v[3], self.s[3])*dx - self.gyy(self.v, self.uh1, self.n, self.l, self.mu, self.source)
+      F = inner(self.v, self.s)*dx - self.g(self.v, self.uh1, self.I, self.n, self.l, self.mu, self.source)
       return F
    @property
    def solver_stemp(self):
@@ -113,9 +105,7 @@ class ElasticLF4(object):
    @property
    def form_uh2(self):
       """ UFL for uh2 equation. """
-      F = inner(self.w[0], self.u[0])*dx - self.fx(self.w, self.stemp, self.u0, self.n, self.absorption)
-      if(self.dimension == 2):
-         F += inner(self.w[1], self.u[1])*dx - self.fy(self.w, self.stemp, self.u0, self.n, self.absorption)
+      F = inner(self.w, self.u)*dx - self.f(self.w, self.stemp, self.u0, self.n, self.absorption)
       return F
    @property
    def solver_uh2(self):
@@ -127,9 +117,7 @@ class ElasticLF4(object):
    @property
    def form_u1(self):
       """ UFL for u1 equation. """
-      F = self.density*inner(self.w[0], (self.u[0] - self.u0[0])/self.dt)*dx - inner(self.w[0], self.uh1[0])*dx - ((self.dt**2)/24.0)*inner(self.w[0], self.uh2[0])*dx
-      if(self.dimension == 2):
-         F += self.density*inner(self.w[1], (self.u[1] - self.u0[1])/self.dt)*dx - inner(self.w[1], self.uh1[1])*dx - ((self.dt**2)/24.0)*inner(self.w[1], self.uh2[1])*dx
+      F = self.density*inner(self.w, (self.u - self.u0)/self.dt)*dx - inner(self.w, self.uh1)*dx - ((self.dt**2)/24.0)*inner(self.w, self.uh2)*dx
       return F
    @property
    def solver_u1(self):
@@ -141,11 +129,7 @@ class ElasticLF4(object):
    @property
    def form_sh1(self):
       """ UFL for sh1 equation. """
-      F = inner(self.v[0], self.s[0])*dx - self.gxx(self.v, self.u1, self.n, self.l, self.mu, self.source)
-      if(self.dimension == 2):
-         F += inner(self.v[1], self.s[1])*dx - self.gxy(self.v, self.u1, self.n, self.l, self.mu)
-         F += inner(self.v[2], self.s[2])*dx - self.gyx(self.v, self.u1, self.n, self.l, self.mu)
-         F += inner(self.v[3], self.s[3])*dx - self.gyy(self.v, self.u1, self.n, self.l, self.mu, self.source)
+      F = inner(self.v, self.s)*dx - self.g(self.v, self.u1, self.I, self.n, self.l, self.mu, self.source)
       return F
    @property
    def solver_sh1(self):
@@ -157,9 +141,7 @@ class ElasticLF4(object):
    @property
    def form_utemp(self):
       """ UFL for utemp equation. """
-      F = inner(self.w[0], self.u[0])*dx - self.fx(self.w, self.sh1, self.u1, self.n, self.absorption)
-      if(self.dimension == 2):
-         F += inner(self.w[1], self.u[1])*dx - self.fy(self.w, self.sh1, self.u1, self.n, self.absorption)
+      F = inner(self.w, self.u)*dx - self.f(self.w, self.sh1, self.u1, self.n, self.absorption)
       return F
    @property
    def solver_utemp(self):
@@ -171,11 +153,7 @@ class ElasticLF4(object):
    @property
    def form_sh2(self):
       """ UFL for sh2 equation. """
-      F = inner(self.v[0], self.s[0])*dx - self.gxx(self.v, self.utemp, self.n, self.l, self.mu, self.source)
-      if(self.dimension == 2):
-         F += inner(self.v[1], self.s[1])*dx - self.gxy(self.v, self.utemp, self.n, self.l, self.mu)
-         F += inner(self.v[2], self.s[2])*dx - self.gyx(self.v, self.utemp, self.n, self.l, self.mu)
-         F += inner(self.v[3], self.s[3])*dx - self.gyy(self.v, self.utemp, self.n, self.l, self.mu, self.source)
+      F = inner(self.v, self.s)*dx - self.g(self.v, self.utemp, self.I, self.n, self.l, self.mu, self.source)
       return F
    @property
    def solver_sh2(self):
@@ -187,11 +165,7 @@ class ElasticLF4(object):
    @property
    def form_s1(self):
       """ UFL for s1 equation. """
-      F = inner(self.v[0], (self.s[0] - self.s0[0])/self.dt)*dx - inner(self.v[0], self.sh1[0])*dx - ((self.dt**2)/24.0)*inner(self.v[0], self.sh2[0])*dx
-      if(self.dimension == 2):
-         F += inner(self.v[1], (self.s[1] - self.s0[1])/self.dt)*dx - inner(self.v[1], self.sh1[1])*dx - ((self.dt**2)/24.0)*inner(self.v[1], self.sh2[1])*dx
-         F += inner(self.v[2], (self.s[2] - self.s0[2])/self.dt)*dx - inner(self.v[2], self.sh1[2])*dx - ((self.dt**2)/24.0)*inner(self.v[2], self.sh2[2])*dx
-         F += inner(self.v[3], (self.s[3] - self.s0[3])/self.dt)*dx - inner(self.v[3], self.sh1[3])*dx - ((self.dt**2)/24.0)*inner(self.v[3], self.sh2[3])*dx
+      F = inner(self.v, (self.s - self.s0)/self.dt)*dx - inner(self.v, self.sh1)*dx - ((self.dt**2)/24.0)*inner(self.v, self.sh2)*dx
       return F
     
    @property
@@ -201,63 +175,19 @@ class ElasticLF4(object):
       problem = LinearVariationalProblem(lhs(F), rhs(F), self.s1)
       return LinearVariationalSolver(problem)
    
-   def fx(self, w, s0, u0, n, absorption=None):
-      """ x-component of the velocity equation RHS. """
-      fx = -inner(grad(w[0])[0], s0[0])*dx + inner(avg(s0[0]), jump(w[0], n[0]))*dS - inner(grad(w[0])[1], s0[1])*dx + inner(avg(s0[1]), jump(w[0], n[1]))*dS
+   def f(self, w, s0, u0, n, absorption=None):
+      """ The RHS of the velocity equation. """
+      f = -inner(grad(w), s0)*dx + inner(avg(s0)*n('+'), w('+'))*dS + inner(avg(s0)*n('-'), w('-'))*dS
       if(absorption):
-         fx += -inner(w[0], absorption*u0[0])*dx
-      return fx
-      
-   def fy(self, w, s0, u0, n, absorption=None):
-      """ y-component of the velocity equation RHS. """
-      fy = -inner(grad(w[1])[0], s0[2])*dx + inner(avg(s0[2]), jump(w[1], n[0]))*dS - inner(grad(w[1])[1], s0[3])*dx + inner(avg(s0[3]), jump(w[1], n[1]))*dS
-      if(absorption):
-         fy += -inner(w[1], absorption*u0[1])*dx
-      return fy
-
+         f += -inner(w, absorption*u0)*dx
+      return f
    
-   def gxx(self, v, u1, n, l, mu, source=None):
-      """ xx-component of stress equation RHS. """
-      gxx =  - (l + 2*mu)*inner(grad(v[0])[0], u1[0])*dx \
-             + (l + 2*mu)*inner(jump(v[0], n[0]), avg(u1[0]))*dS \
-             + (l + 2*mu)*inner(v[0], u1[0]*n[0])*ds \
-             - l*inner(grad(v[0])[1], u1[1])*dx \
-             + l*inner(jump(v[0], n[1]), avg(u1[1]))*dS \
-             + l*inner(v[0], u1[1]*n[1])*ds
+   def g(self, v, u1, I, n, l, mu, source=None):
+      """ The RHS of the stress equation. """
+      g =  - l*(v[i,j]*I[i,j]).dx(k)*u1[k]*dx + l*(jump(v[i,j], n[k])*I[i,j]*avg(u1[k]))*dS + l*(v[i,j]*I[i,j]*u1[k]*n[k])*ds - mu*inner(div(v), u1)*dx + mu*inner(avg(u1), jump(v, n))*dS - mu*inner(div(v.T), u1)*dx + mu*inner(avg(u1), jump(v.T, n))*dS + mu*inner(u1, dot(v, n))*ds + mu*inner(u1, dot(v.T, n))*ds
       if(source):
-         gxx += inner(v[0], source)*dx
-      return gxx
-      
-   def gxy(self, v, u1, n, l, mu):
-      """ xy-component of stress equation RHS. """
-      return - mu*(inner(grad(v[1])[0], u1[1]))*dx \
-             + mu*(inner(v[1], u1[1]*n[0]))*ds \
-             + mu*(inner(jump(v[1], n[0]), avg(u1[1])))*dS \
-             - mu*(inner(grad(v[1])[1], u1[0]))*dx \
-             + mu*(inner(v[1], u1[0]*n[1]))*ds \
-             + mu*(inner(jump(v[1], n[1]), avg(u1[0])))*dS
-
-   def gyx(self, v, u1, n, l, mu):
-      """ yx-component of stress equation RHS. """
-      return - mu*(inner(grad(v[2])[0], u1[1]))*dx \
-             + mu*(inner(v[2], u1[1]*n[0]))*ds \
-             + mu*(inner(jump(v[2], n[0]), avg(u1[1])))*dS \
-             - mu*(inner(grad(v[2])[1], u1[0]))*dx \
-             + mu*(inner(v[2], u1[0]*n[1]))*ds \
-             + mu*(inner(jump(v[2], n[1]), avg(u1[0])))*dS
-             
-   def gyy(self, v, u1, n, l, mu, source=None):  
-      """ yy-component of stress equation RHS. """  
-      gyy =  - l*inner(grad(v[3])[0], u1[0])*dx \
-             + l*inner(v[3], u1[0]*n[0])*ds \
-             + l*inner(jump(v[3], n[0]), avg(u1[0]))*dS \
-             - (l + 2*mu)*inner(grad(v[3])[1], u1[1])*dx \
-             + (l + 2*mu)*inner(jump(v[3], n[1]), avg(u1[1]))*dS \
-             + (l + 2*mu)*inner(v[3], u1[1]*n[1])*ds
-      if(source):
-         gyy += inner(v[3], source)*dx
-      return gyy
-
+         g += inner(v, source)*dx
+      return g
 
    def write(self, u=None, s=None):
       """ Write the velocity and/or stress fields to file. """
@@ -265,7 +195,8 @@ class ElasticLF4(object):
          if(u):
             self.u_stream << u
          if(s):
-            self.s_stream << s
+            pass # FIXME: Cannot currently write tensor valued fields to a VTU file.
+            #self.s_stream << s
 
    def run(self, T):
       """ Run the elastic wave simulation until t = T. """
