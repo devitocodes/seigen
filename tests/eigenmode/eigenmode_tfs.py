@@ -3,23 +3,10 @@
 from firedrake import *
 import os
 
-# PETSc environment variables
-try:
-   if(os.environ["PETSC_OPTIONS"] == ""):
-      os.environ["PETSC_OPTIONS"] = "-log_summary"
-   else:
-      os.environ["PETSC_OPTIONS"] = os.environ["PETSC_OPTIONS"] + " -log_summary"
-except KeyError:
-   # Environment variable does not exist, so let's set it now.
-   os.environ["PETSC_OPTIONS"] = "-log_summary"
-   
-parameters['form_compiler']['quadrature_degree'] = 4
-parameters["coffee"]["O2"] = False
+mesh = UnitSquareMesh(20, 20)
 
-mesh = UnitSquareMesh(20, 20, 'crossed')
-
-S = TensorFunctionSpace(mesh, "CG", 1)
-U = VectorFunctionSpace(mesh, "CG", 1)
+S = TensorFunctionSpace(mesh, "DG", 1)
+U = VectorFunctionSpace(mesh, "DG", 1)
 dimension = 2
 
 v = TestFunction(S)
@@ -41,10 +28,12 @@ l = 0.5
 Vp = sqrt((l + 2*mu)/density) # P-wave velocity
 Vs = sqrt(mu/density) # S-wave velocity
 
+n = FacetNormal(mesh)
+I = Identity(dimension)
 
 # Weak forms
-F_u = density*inner(w, (u - u0)/dt)*dx + inner(grad(w), s0)*dx
-F_s = inner(v, (s - s0)/dt)*dx - inner(v, l*(div(u1))*Identity(dimension))*dx - inner(v, mu*(grad(u1) + grad(u1).T))*dx
+F_u = density*inner(w, (u - u0)/dt)*dx + inner(grad(w), s0)*dx - inner(avg(s0)*n('+'), w('+'))*dS - inner(avg(s0)*n('-'), w('-'))*dS
+F_s = inner(v, (s - s0)/dt)*dx + l*(v[i,j]*I[i,j]).dx(k)*u1[k]*dx - l*(jump(v[i,j], n[k])*I[i,j]*avg(u1[k]))*dS - l*(v[i,j]*I[i,j]*u1[k]*n[k])*ds + mu*inner(div(v), u1)*dx - mu*inner(avg(u1), jump(v, n))*dS + mu*inner(div(v.T), u1)*dx - mu*inner(avg(u1), jump(v.T, n))*dS - mu*inner(u1, dot(v, n))*ds - mu*inner(u1, dot(v.T, n))*ds
 
 problem_u = LinearVariationalProblem(lhs(F_u), rhs(F_u), u1)
 solver_u = LinearVariationalSolver(problem_u)
@@ -91,5 +80,5 @@ while t <= T + 1e-12:
    output_u << u1
    #output_s << s1
    
-   print "|u-uexact| = %f" % errornorm(u1, uexact)
-   print "|s-sexact| = %f" % errornorm(s1, sexact)
+   #print "|u-uexact| = %f" % errornorm(u1, uexact)
+   #print "|s-sexact| = %f" % errornorm(s1, sexact)
