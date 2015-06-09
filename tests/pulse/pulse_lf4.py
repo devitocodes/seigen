@@ -22,15 +22,16 @@ elastic.l = 0.5
 print "P-wave velocity: %f" % Vp(elastic.mu, elastic.l, elastic.density)
 print "S-wave velocity: %f" % Vs(elastic.mu, elastic.density)
 
-elastic.absorption_function = Function(elastic.U)
+F = FunctionSpace(elastic.mesh, "DG", 1)
+elastic.absorption_function = Function(F)
 elastic.absorption = Expression("x[0] >= 3.5 || x[0] <= 0.5 ? 100.0 : 0")
 
 # Initial conditions
 uic = Expression(('exp(-50*pow((x[0]-1), 2))', '0'))
-elastic.u0.assign(Function(elastic.WU).interpolate(uic))
+elastic.u0.assign(Function(elastic.U).interpolate(uic))
 sic = Expression((('-exp(-50*pow((x[0]-1), 2))', '0'),
                    ('0', '0')))
-elastic.s0.assign(Function(elastic.WS).interpolate(sic))
+elastic.s0.assign(Function(elastic.S).interpolate(sic))
 
 T = 2.0
 elastic.run(T)
