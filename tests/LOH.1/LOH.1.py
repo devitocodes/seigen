@@ -13,13 +13,13 @@ C = FunctionSpace(mesh, "CG", 1)
 D = FunctionSpace(mesh, "DG", 1)
 elastic.density = Function(D).interpolate(Expression("x[2] >= 1000 ? 2600 : 2700"))
 elastic.dt = 0.001
-elastic.mu = Function(C).interpolate(Expression("x[2] >= 1000 ? 10.4e6 : 32.4e6"))
-elastic.l = Function(C).interpolate(Expression("x[2] >= 1000 ? 20.8e6 : 32.4e6"))
+elastic.mu = Function(C).interpolate(Expression("x[2] >= 1000 ? 10.4e9 : 32.4e9"))
+elastic.l = Function(C).interpolate(Expression("x[2] >= 1000 ? 20.8e9 : 32.4e9"))
 
-print "P-wave velocity in Medium 1: %f" % Vp(10.4e6, 20.8e6, 2600)
-print "S-wave velocity in Medium 1: %f" % Vs(10.4e6, 2600)
-print "P-wave velocity in Medium 2: %f" % Vp(32.4e6, 32.4e6, 2700)
-print "S-wave velocity in Medium 2: %f" % Vs(32.4e6, 2700)
+print "P-wave velocity in Medium 1: %f" % Vp(10.4e9, 20.8e9, 2600)
+print "S-wave velocity in Medium 1: %f" % Vs(10.4e9, 2600)
+print "P-wave velocity in Medium 2: %f" % Vp(32.4e9, 32.4e9, 2700)
+print "S-wave velocity in Medium 2: %f" % Vs(32.4e9, 2700)
 
 # Source
 smoothness = 0.1
