@@ -36,7 +36,7 @@ def run(N, degree, dt):
    T = 5.0
    u1, s1 = elastic.run(T)
    
-   HU = VectorFunctionSpace(mesh, "DG", 4)
+   HU = VectorFunctionSpace(mesh, "DG", 3)
    temp = Function(HU)
    temp_test = TestFunction(HU)
    temp_trial = TrialFunction(HU)
@@ -44,7 +44,7 @@ def run(N, degree, dt):
    solve(lhs(G) == rhs(G), temp)
    u_error = norm(temp)
 
-   HU = TensorFunctionSpace(mesh, "DG", 4)
+   HU = TensorFunctionSpace(mesh, "DG", 3)
    temp = Function(HU)
    temp_test = TestFunction(HU)
    temp_trial = TrialFunction(HU)
@@ -56,7 +56,7 @@ def run(N, degree, dt):
 
 def convergence_analysis():
    degrees = range(1, 4)
-   N = [2**i for i in range(2, 5)]
+   N = [2**i for i in range(1, 4)]
    
    dx = [1.0/n for n in N]  
    
