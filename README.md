@@ -1,8 +1,8 @@
-# Elasmic
+# Seigen
 
 ## Overview
 
-Elasmic is an elastic wave equation solver for seimological problems. It forms part of the [Open Performance portablE SeismiC Imaging (OPESCI)](http://opesci.github.io/) project.
+Seigen (seismology through code generation) is an elastic wave equation solver for seimological problems. It forms part of the [Open Performance portablE SeismiC Imaging (OPESCI)](http://opesci.github.io/) project.
 
 ## Dependencies
 
