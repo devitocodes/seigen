@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
 from firedrake import *
-from elastic_wave.elastic import *
+from elastic_wave.elastic_ader import *
 from elastic_wave.helpers import *
 
 def run(N, degree, dt):
    mesh = UnitSquareMesh(N, N)
-   elastic = ElasticLF4(mesh, "DG", degree, dimension=2)
+   elastic = ElasticADER(mesh, "DG", degree, dimension=2)
    
    # Constants
    elastic.density = 1.0
