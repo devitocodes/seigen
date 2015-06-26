@@ -69,18 +69,13 @@ class ElasticLF4(object):
    def source(self, expression):
       self.source_function.interpolate(expression) 
 
-   def assemble_lumped_mass(self):
-      # Lumped mass for the velocity equation
-      one = Function(self.U).interpolate(Expression(("1",) * self.U.cdim))
-      M_lumped = assemble(action(inner(self.w, self.u)*dx, one))
-      self.inv_lumped_velocity = Function(self.U).assign(1)
-      self.inv_lumped_velocity /= M_lumped
-
-      # Lumped mass for the stress equation
-      one = Function(self.S).interpolate(Expression(("1",) * self.S.cdim))
-      M_lumped = assemble(action(inner(self.v, self.s)*dx, one))
-      self.inv_lumped_stress = Function(self.S).assign(1)
-      self.inv_lumped_stress /= M_lumped
+   def assemble_inverse_mass(self):
+      # Inverse of the (consistent) mass matrix for the velocity equation.
+      self.inverse_mass_velocity = assemble(inner(self.w, self.u)*dx, inverse=True)
+      self.inverse_mass_velocity.assemble()
+      # Inverse of the (consistent) mass matrix for the stress equation.
+      self.inverse_mass_stress = assemble(inner(self.v, self.s)*dx, inverse=True)
+      self.inverse_mass_stress.assemble()
       return
       
    @property
@@ -92,8 +87,7 @@ class ElasticLF4(object):
    def solve_uh1(self):
       """ Solve for uh1. """
       F = self.form_uh1
-      self.uh1.assign(assemble(rhs(F)))
-      self.uh1 *= self.inv_lumped_velocity
+      self.uh1.vector().set_local(numpy.dot(self.inverse_mass_velocity.M.values, assemble(rhs(F)).vector().array()))
       return
 
    @property
@@ -105,8 +99,7 @@ class ElasticLF4(object):
    def solve_stemp(self):
       """ Solve for stemp. """
       F = self.form_stemp
-      self.stemp.assign(assemble(rhs(F)))
-      self.stemp *= self.inv_lumped_stress
+      self.stemp.vector().set_local(numpy.dot(self.inverse_mass_stress.M.values, assemble(rhs(F)).vector().array()))
       return
 
    @property
@@ -118,8 +111,7 @@ class ElasticLF4(object):
    def solve_uh2(self):
       """ Solve for uh2. """
       F = self.form_uh2
-      self.uh2.assign(assemble(rhs(F)))
-      self.uh2 *= self.inv_lumped_velocity
+      self.uh2.vector().set_local(numpy.dot(self.inverse_mass_velocity.M.values, assemble(rhs(F)).vector().array()))
       return
 
    @property
@@ -131,8 +123,7 @@ class ElasticLF4(object):
    def solve_u1(self):
       """ Solve for u1. """
       F = self.form_u1
-      self.u1.assign(assemble(rhs(F)))
-      self.u1 *= self.inv_lumped_velocity
+      self.u1.vector().set_local(numpy.dot(self.inverse_mass_velocity.M.values, assemble(rhs(F)).vector().array()))
       return
       
    @property
@@ -144,8 +135,7 @@ class ElasticLF4(object):
    def solve_sh1(self):
       """ Solve for sh1. """
       F = self.form_sh1
-      self.sh1.assign(assemble(rhs(F)))
-      self.sh1 *= self.inv_lumped_stress
+      self.sh1.vector().set_local(numpy.dot(self.inverse_mass_stress.M.values, assemble(rhs(F)).vector().array()))
       return
 
    @property
@@ -157,8 +147,7 @@ class ElasticLF4(object):
    def solve_utemp(self):
       """ Solve for utemp. """
       F = self.form_utemp
-      self.utemp.assign(assemble(rhs(F)))
-      self.utemp *= self.inv_lumped_velocity
+      self.utemp.vector().set_local(numpy.dot(self.inverse_mass_velocity.M.values, assemble(rhs(F)).vector().array()))
       return
 
    @property
@@ -170,8 +159,7 @@ class ElasticLF4(object):
    def solve_sh2(self):
       """ Solve for sh2. """
       F = self.form_sh2
-      self.sh2.assign(assemble(rhs(F)))
-      self.sh2 *= self.inv_lumped_stress
+      self.sh2.vector().set_local(numpy.dot(self.inverse_mass_stress.M.values, assemble(rhs(F)).vector().array()))
       return
 
    @property
@@ -183,8 +171,7 @@ class ElasticLF4(object):
    def solve_s1(self):
       """ Solve for s1. """
       F = self.form_s1
-      self.s1.assign(assemble(rhs(F)))
-      self.s1 *= self.inv_lumped_stress
+      self.s1.vector().set_local(numpy.dot(self.inverse_mass_stress.M.values, assemble(rhs(F)).vector().array()))
       return
    
    def f(self, w, s0, u0, n, absorption=None):
@@ -212,10 +199,10 @@ class ElasticLF4(object):
 
    def run(self, T):
       """ Run the elastic wave simulation until t = T. """
-      self.write(self.u1, self.s1) # Write out the initial condition.
+      #self.write(self.u1, self.s1) # Write out the initial condition.
       
       # Pre-assemble the lumped mass matrices, which should stay constant throughout the simulation (assuming no mesh adaptivity).
-      self.assemble_lumped_mass()
+      self.assemble_inverse_mass()
       
       with timed_region('timestepping'):
          t = self.dt
@@ -245,7 +232,7 @@ class ElasticLF4(object):
                self.s0.assign(self.s1)
             
             # Write out the new fields
-            self.write(self.u1, self.s1)
+            #self.write(self.u1, self.s1)
             
             # Move onto next timestep
             t += self.dt
