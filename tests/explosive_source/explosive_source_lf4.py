@@ -5,11 +5,11 @@ from elastic_wave.elastic import *
 from elastic_wave.helpers import *
 
 Lx = 300.0
-Ly = 100.0
+Ly = 150.0
 h = 2.5
 with timed_region('mesh generation'):
    mesh = RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
-elastic = ElasticLF4(mesh, "DG", 1, dimension=2)
+elastic = ElasticLF4(mesh, "DG", 2, dimension=2)
 
 # Constants
 elastic.density = 1.0
