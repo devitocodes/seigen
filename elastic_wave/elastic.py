@@ -4,8 +4,6 @@ from pyop2 import *
 from pyop2.profiling import timed_region, summary
 op2.init(lazy_evaluation=False)
 from firedrake import *
-parameters["coffee"]["O2"] = False # FIXME: Remove this one this issue has been fixed: https://github.com/firedrakeproject/firedrake/issues/425
-parameters["assembly_cache"]["enabled"] = False
 import mpi4py
 import numpy
 
@@ -55,6 +53,7 @@ class ElasticLF4(object):
          self.u_stream = File("velocity.pvd")
          self.s_stream = File("stress.pvd")
       
+   # Absorption coefficient sigma for the absorption term: sigma*velocity
    @property
    def absorption(self):
       return self.absorption_function
@@ -62,6 +61,7 @@ class ElasticLF4(object):
    def absorption(self, expression):
       self.absorption_function.interpolate(expression)
       
+   # Source term
    @property
    def source(self):
       return self.source_function
@@ -69,15 +69,14 @@ class ElasticLF4(object):
    def source(self, expression):
       self.source_function.interpolate(expression) 
 
-
-   def lumped_mass_velocity(self):
+   def assemble_lumped_mass(self):
+      # Lumped mass for the velocity equation
       one = Function(self.U).interpolate(Expression(("1",) * self.U.cdim))
       M_lumped = assemble(action(inner(self.w, self.u)*dx, one))
       self.inv_lumped_velocity = Function(self.U).assign(1)
       self.inv_lumped_velocity /= M_lumped
-      return
 
-   def lumped_mass_stress(self):
+      # Lumped mass for the stress equation
       one = Function(self.S).interpolate(Expression(("1",) * self.S.cdim))
       M_lumped = assemble(action(inner(self.v, self.s)*dx, one))
       self.inv_lumped_stress = Function(self.S).assign(1)
@@ -91,9 +90,8 @@ class ElasticLF4(object):
       return F
 
    def solve_uh1(self):
-      """ Solver object for uh1. """
+      """ Solve for uh1. """
       F = self.form_uh1
-      # Lumped mass solution
       self.uh1.assign(assemble(rhs(F)))
       self.uh1 *= self.inv_lumped_velocity
       return
@@ -105,7 +103,7 @@ class ElasticLF4(object):
       return F
 
    def solve_stemp(self):
-      """ Solver object for stemp. """
+      """ Solve for stemp. """
       F = self.form_stemp
       self.stemp.assign(assemble(rhs(F)))
       self.stemp *= self.inv_lumped_stress
@@ -118,7 +116,7 @@ class ElasticLF4(object):
       return F
 
    def solve_uh2(self):
-      """ Solver object for uh2. """
+      """ Solve for uh2. """
       F = self.form_uh2
       self.uh2.assign(assemble(rhs(F)))
       self.uh2 *= self.inv_lumped_velocity
@@ -126,12 +124,12 @@ class ElasticLF4(object):
 
    @property
    def form_u1(self):
-      """ UFL for u1 equation. """
-      F = density*inner(self.w, self.u)*dx - density*inner(self.w, self.u0)*dx - self.dt*inner(self.w, self.uh1)*dx - ((self.dt**3)/24.0)*inner(self.w, self.uh2)*dx
+      """ UFL for u1 equation. Note that we have multiplied through by dt here. """
+      F = self.density*inner(self.w, self.u)*dx - self.density*inner(self.w, self.u0)*dx - self.dt*inner(self.w, self.uh1)*dx - ((self.dt**3)/24.0)*inner(self.w, self.uh2)*dx
       return F
 
    def solve_u1(self):
-      """ Solver object for u1. """
+      """ Solve for u1. """
       F = self.form_u1
       self.u1.assign(assemble(rhs(F)))
       self.u1 *= self.inv_lumped_velocity
@@ -144,7 +142,7 @@ class ElasticLF4(object):
       return F
 
    def solve_sh1(self):
-      """ Solver object for sh1. """
+      """ Solve for sh1. """
       F = self.form_sh1
       self.sh1.assign(assemble(rhs(F)))
       self.sh1 *= self.inv_lumped_stress
@@ -157,7 +155,7 @@ class ElasticLF4(object):
       return F
 
    def solve_utemp(self):
-      """ Solver object for utemp. """
+      """ Solve for utemp. """
       F = self.form_utemp
       self.utemp.assign(assemble(rhs(F)))
       self.utemp *= self.inv_lumped_velocity
@@ -170,7 +168,7 @@ class ElasticLF4(object):
       return F
 
    def solve_sh2(self):
-      """ Solver object for sh2. """
+      """ Solve for sh2. """
       F = self.form_sh2
       self.sh2.assign(assemble(rhs(F)))
       self.sh2 *= self.inv_lumped_stress
@@ -178,12 +176,12 @@ class ElasticLF4(object):
 
    @property
    def form_s1(self):
-      """ UFL for s1 equation. """
+      """ UFL for s1 equation. Note that we have multiplied through by dt here. """
       F = inner(self.v, self.s)*dx - inner(self.v, self.s0)*dx - self.dt*inner(self.v, self.sh1)*dx - ((self.dt**3)/24.0)*inner(self.v, self.sh2)*dx
       return F
     
    def solve_s1(self):
-      """ Solver object for s1. """
+      """ Solve for s1. """
       F = self.form_s1
       self.s1.assign(assemble(rhs(F)))
       self.s1 *= self.inv_lumped_stress
@@ -209,15 +207,15 @@ class ElasticLF4(object):
          if(u):
             self.u_stream << u
          if(s):
-            pass # FIXME: Cannot currently write tensor valued fields to a VTU file.
+            pass # FIXME: Cannot currently write tensor valued fields to a VTU file. See https://github.com/firedrakeproject/firedrake/issues/538
             #self.s_stream << s
 
    def run(self, T):
       """ Run the elastic wave simulation until t = T. """
-      self.write(self.u1, self.s1.split()[0]) # Write out the initial condition.
+      self.write(self.u1, self.s1) # Write out the initial condition.
       
-      self.lumped_mass_velocity()
-      self.lumped_mass_stress()
+      # Pre-assemble the lumped mass matrices, which should stay constant throughout the simulation (assuming no mesh adaptivity).
+      self.assemble_lumped_mass()
       
       with timed_region('timestepping'):
          t = self.dt
@@ -247,7 +245,7 @@ class ElasticLF4(object):
                self.s0.assign(self.s1)
             
             # Write out the new fields
-            self.write(self.u1, self.s1.split()[0])
+            self.write(self.u1, self.s1)
             
             # Move onto next timestep
             t += self.dt
