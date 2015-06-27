@@ -7,3 +7,4 @@ Seigen (seismology through code generation) is an elastic wave equation solver f
 ## Dependencies
 
 * [Firedrake](http://www.firedrakeproject.org)
+

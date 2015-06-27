@@ -1,22 +1,11 @@
 #!/usr/bin/env python
 
-# PETSc environment variables
-import os
-try:
-   if(os.environ["PETSC_OPTIONS"] == ""):
-      os.environ["PETSC_OPTIONS"] = "-log_summary"
-   else:
-      os.environ["PETSC_OPTIONS"] = os.environ["PETSC_OPTIONS"] + " -log_summary"
-except KeyError:
-   # Environment variable does not exist, so let's set it now.
-   os.environ["PETSC_OPTIONS"] = "-log_summary"
-print "Environment variable PETSC_OPTIONS set to: %s" % (os.environ["PETSC_OPTIONS"])
-
 from pyop2 import *
 from pyop2.profiling import timed_region, summary
 op2.init(lazy_evaluation=False)
 from firedrake import *
 import mpi4py
+import numpy
 
 class ElasticLF4(object):
    """ Elastic wave equation solver using the finite element method and a fourth-order leap-frog time-stepping scheme. """
@@ -64,6 +53,7 @@ class ElasticLF4(object):
          self.u_stream = File("velocity.pvd")
          self.s_stream = File("stress.pvd")
       
+   # Absorption coefficient sigma for the absorption term: sigma*velocity
    @property
    def absorption(self):
       return self.absorption_function
@@ -71,6 +61,7 @@ class ElasticLF4(object):
    def absorption(self, expression):
       self.absorption_function.interpolate(expression)
       
+   # Source term
    @property
    def source(self):
       return self.source_function
@@ -78,102 +69,110 @@ class ElasticLF4(object):
    def source(self, expression):
       self.source_function.interpolate(expression) 
 
+   def assemble_inverse_mass(self):
+      # Inverse of the (consistent) mass matrix for the velocity equation.
+      self.inverse_mass_velocity = assemble(inner(self.w, self.u)*dx, inverse=True)
+      self.inverse_mass_velocity.assemble()
+      # Inverse of the (consistent) mass matrix for the stress equation.
+      self.inverse_mass_stress = assemble(inner(self.v, self.s)*dx, inverse=True)
+      self.inverse_mass_stress.assemble()
+      return
+      
    @property
    def form_uh1(self):
       """ UFL for uh1 equation. """
       F = inner(self.w, self.u)*dx - self.f(self.w, self.s0, self.u0, self.n, self.absorption)
       return F
-   @property
-   def solver_uh1(self):
-      """ Solver object for uh1. """
+
+   def solve_uh1(self):
+      """ Solve for uh1. """
       F = self.form_uh1
-      problem = LinearVariationalProblem(lhs(F), rhs(F), self.uh1)
-      return LinearVariationalSolver(problem)
+      self.uh1.vector().set_local(numpy.dot(self.inverse_mass_velocity.M.values, assemble(rhs(F)).vector().array()))
+      return
 
    @property
    def form_stemp(self):
       """ UFL for stemp equation. """
       F = inner(self.v, self.s)*dx - self.g(self.v, self.uh1, self.I, self.n, self.l, self.mu, self.source)
       return F
-   @property
-   def solver_stemp(self):
-      """ Solver object for stemp. """
+
+   def solve_stemp(self):
+      """ Solve for stemp. """
       F = self.form_stemp
-      problem = LinearVariationalProblem(lhs(F), rhs(F), self.stemp)
-      return LinearVariationalSolver(problem)
+      self.stemp.vector().set_local(numpy.dot(self.inverse_mass_stress.M.values, assemble(rhs(F)).vector().array()))
+      return
 
    @property
    def form_uh2(self):
       """ UFL for uh2 equation. """
       F = inner(self.w, self.u)*dx - self.f(self.w, self.stemp, self.u0, self.n, self.absorption)
       return F
-   @property
-   def solver_uh2(self):
-      """ Solver object for uh2. """
+
+   def solve_uh2(self):
+      """ Solve for uh2. """
       F = self.form_uh2
-      problem = LinearVariationalProblem(lhs(F), rhs(F), self.uh2)
-      return LinearVariationalSolver(problem)
+      self.uh2.vector().set_local(numpy.dot(self.inverse_mass_velocity.M.values, assemble(rhs(F)).vector().array()))
+      return
 
    @property
    def form_u1(self):
-      """ UFL for u1 equation. """
-      F = self.density*inner(self.w, (self.u - self.u0)/self.dt)*dx - inner(self.w, self.uh1)*dx - ((self.dt**2)/24.0)*inner(self.w, self.uh2)*dx
+      """ UFL for u1 equation. Note that we have multiplied through by dt here. """
+      F = self.density*inner(self.w, self.u)*dx - self.density*inner(self.w, self.u0)*dx - self.dt*inner(self.w, self.uh1)*dx - ((self.dt**3)/24.0)*inner(self.w, self.uh2)*dx
       return F
-   @property
-   def solver_u1(self):
-      """ Solver object for u1. """
+
+   def solve_u1(self):
+      """ Solve for u1. """
       F = self.form_u1
-      problem = LinearVariationalProblem(lhs(F), rhs(F), self.u1)
-      return LinearVariationalSolver(problem)
+      self.u1.vector().set_local(numpy.dot(self.inverse_mass_velocity.M.values, assemble(rhs(F)).vector().array()))
+      return
       
    @property
    def form_sh1(self):
       """ UFL for sh1 equation. """
       F = inner(self.v, self.s)*dx - self.g(self.v, self.u1, self.I, self.n, self.l, self.mu, self.source)
       return F
-   @property
-   def solver_sh1(self):
-      """ Solver object for sh1. """
+
+   def solve_sh1(self):
+      """ Solve for sh1. """
       F = self.form_sh1
-      problem = LinearVariationalProblem(lhs(F), rhs(F), self.sh1)
-      return LinearVariationalSolver(problem)
+      self.sh1.vector().set_local(numpy.dot(self.inverse_mass_stress.M.values, assemble(rhs(F)).vector().array()))
+      return
 
    @property
    def form_utemp(self):
       """ UFL for utemp equation. """
       F = inner(self.w, self.u)*dx - self.f(self.w, self.sh1, self.u1, self.n, self.absorption)
       return F
-   @property
-   def solver_utemp(self):
-      """ Solver object for utemp. """
+
+   def solve_utemp(self):
+      """ Solve for utemp. """
       F = self.form_utemp
-      problem = LinearVariationalProblem(lhs(F), rhs(F), self.utemp)
-      return LinearVariationalSolver(problem)
+      self.utemp.vector().set_local(numpy.dot(self.inverse_mass_velocity.M.values, assemble(rhs(F)).vector().array()))
+      return
 
    @property
    def form_sh2(self):
       """ UFL for sh2 equation. """
       F = inner(self.v, self.s)*dx - self.g(self.v, self.utemp, self.I, self.n, self.l, self.mu, self.source)
       return F
-   @property
-   def solver_sh2(self):
-      """ Solver object for sh2. """
+
+   def solve_sh2(self):
+      """ Solve for sh2. """
       F = self.form_sh2
-      problem = LinearVariationalProblem(lhs(F), rhs(F), self.sh2)
-      return LinearVariationalSolver(problem)
+      self.sh2.vector().set_local(numpy.dot(self.inverse_mass_stress.M.values, assemble(rhs(F)).vector().array()))
+      return
 
    @property
    def form_s1(self):
-      """ UFL for s1 equation. """
-      F = inner(self.v, (self.s - self.s0)/self.dt)*dx - inner(self.v, self.sh1)*dx - ((self.dt**2)/24.0)*inner(self.v, self.sh2)*dx
+      """ UFL for s1 equation. Note that we have multiplied through by dt here. """
+      F = inner(self.v, self.s)*dx - inner(self.v, self.s0)*dx - self.dt*inner(self.v, self.sh1)*dx - ((self.dt**3)/24.0)*inner(self.v, self.sh2)*dx
       return F
     
-   @property
-   def solver_s1(self):
-      """ Solver object for s1. """
+   def solve_s1(self):
+      """ Solve for s1. """
       F = self.form_s1
-      problem = LinearVariationalProblem(lhs(F), rhs(F), self.s1)
-      return LinearVariationalSolver(problem)
+      self.s1.vector().set_local(numpy.dot(self.inverse_mass_stress.M.values, assemble(rhs(F)).vector().array()))
+      return
    
    def f(self, w, s0, u0, n, absorption=None):
       """ The RHS of the velocity equation. """
@@ -195,23 +194,15 @@ class ElasticLF4(object):
          if(u):
             self.u_stream << u
          if(s):
-            pass # FIXME: Cannot currently write tensor valued fields to a VTU file.
+            pass # FIXME: Cannot currently write tensor valued fields to a VTU file. See https://github.com/firedrakeproject/firedrake/issues/538
             #self.s_stream << s
 
    def run(self, T):
       """ Run the elastic wave simulation until t = T. """
-      self.write(self.u1, self.s1.split()[0]) # Write out the initial condition.
+      #self.write(self.u1, self.s1) # Write out the initial condition.
       
-      # Construct the solver objects outside of the time-stepping loop.
-      with timed_region('solver setup'):
-         solver_uh1 = self.solver_uh1
-         solver_stemp = self.solver_stemp
-         solver_uh2 = self.solver_uh2
-         solver_u1 = self.solver_u1
-         solver_sh1 = self.solver_sh1
-         solver_utemp = self.solver_utemp
-         solver_sh2 = self.solver_sh2
-         solver_s1 = self.solver_s1
+      # Pre-assemble the lumped mass matrices, which should stay constant throughout the simulation (assuming no mesh adaptivity).
+      self.assemble_inverse_mass()
       
       with timed_region('timestepping'):
          t = self.dt
@@ -226,22 +217,22 @@ class ElasticLF4(object):
             
             # Solve for the velocity vector field.
             with timed_region('velocity solve'):
-               solver_uh1.solve()
-               solver_stemp.solve()
-               solver_uh2.solve()
-               solver_u1.solve()
+               self.solve_uh1()
+               self.solve_stemp()
+               self.solve_uh2()
+               self.solve_u1()
                self.u0.assign(self.u1)
             
             # Solve for the stress tensor field.
             with timed_region('stress solve'):
-               solver_sh1.solve()
-               solver_utemp.solve()
-               solver_sh2.solve()
-               solver_s1.solve()
+               self.solve_sh1()
+               self.solve_utemp()
+               self.solve_sh2()
+               self.solve_s1()
                self.s0.assign(self.s1)
             
             # Write out the new fields
-            self.write(self.u1, self.s1.split()[0])
+            #self.write(self.u1, self.s1)
             
             # Move onto next timestep
             t += self.dt
