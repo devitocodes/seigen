@@ -2,6 +2,7 @@
 
 from pyop2 import *
 from pyop2.profiling import timed_region, summary
+from pyop2.utils import cached_property
 op2.init(lazy_evaluation=False)
 from firedrake import *
 import mpi4py
@@ -84,11 +85,10 @@ class ElasticLF4(object):
       F = inner(self.w, self.u)*dx - self.f(self.w, self.s0, self.u0, self.n, self.absorption)
       return F
 
-   def solve_uh1(self):
-      """ Solve for uh1. """
-      F = self.form_uh1
-      self.uh1.vector().set_local(numpy.dot(self.inverse_mass_velocity.M.values, assemble(rhs(F)).vector().array()))
-      return
+   @cached_property
+   def rhs_uh1(self):
+      """ RHS for uh1 equation. """
+      return rhs(self.form_uh1)
 
    @property
    def form_stemp(self):
@@ -96,11 +96,10 @@ class ElasticLF4(object):
       F = inner(self.v, self.s)*dx - self.g(self.v, self.uh1, self.I, self.n, self.l, self.mu, self.source)
       return F
 
-   def solve_stemp(self):
-      """ Solve for stemp. """
-      F = self.form_stemp
-      self.stemp.vector().set_local(numpy.dot(self.inverse_mass_stress.M.values, assemble(rhs(F)).vector().array()))
-      return
+   @cached_property
+   def rhs_stemp(self):
+      """ RHS for stemp equation. """
+      return rhs(self.form_stemp)
 
    @property
    def form_uh2(self):
@@ -108,11 +107,10 @@ class ElasticLF4(object):
       F = inner(self.w, self.u)*dx - self.f(self.w, self.stemp, self.u0, self.n, self.absorption)
       return F
 
-   def solve_uh2(self):
-      """ Solve for uh2. """
-      F = self.form_uh2
-      self.uh2.vector().set_local(numpy.dot(self.inverse_mass_velocity.M.values, assemble(rhs(F)).vector().array()))
-      return
+   @cached_property
+   def rhs_uh2(self):
+      """ RHS for uh2 equation. """
+      return rhs(self.form_uh2)
 
    @property
    def form_u1(self):
@@ -120,11 +118,10 @@ class ElasticLF4(object):
       F = self.density*inner(self.w, self.u)*dx - self.density*inner(self.w, self.u0)*dx - self.dt*inner(self.w, self.uh1)*dx - ((self.dt**3)/24.0)*inner(self.w, self.uh2)*dx
       return F
 
-   def solve_u1(self):
-      """ Solve for u1. """
-      F = self.form_u1
-      self.u1.vector().set_local(numpy.dot(self.inverse_mass_velocity.M.values, assemble(rhs(F)).vector().array()))
-      return
+   @cached_property
+   def rhs_u1(self):
+      """ RHS for u1 equation. """
+      return rhs(self.form_u1)
       
    @property
    def form_sh1(self):
@@ -132,11 +129,10 @@ class ElasticLF4(object):
       F = inner(self.v, self.s)*dx - self.g(self.v, self.u1, self.I, self.n, self.l, self.mu, self.source)
       return F
 
-   def solve_sh1(self):
-      """ Solve for sh1. """
-      F = self.form_sh1
-      self.sh1.vector().set_local(numpy.dot(self.inverse_mass_stress.M.values, assemble(rhs(F)).vector().array()))
-      return
+   @cached_property
+   def rhs_sh1(self):
+      """ RHS for sh1 equation. """
+      return rhs(self.form_sh1)
 
    @property
    def form_utemp(self):
@@ -144,11 +140,10 @@ class ElasticLF4(object):
       F = inner(self.w, self.u)*dx - self.f(self.w, self.sh1, self.u1, self.n, self.absorption)
       return F
 
-   def solve_utemp(self):
-      """ Solve for utemp. """
-      F = self.form_utemp
-      self.utemp.vector().set_local(numpy.dot(self.inverse_mass_velocity.M.values, assemble(rhs(F)).vector().array()))
-      return
+   @cached_property
+   def rhs_utemp(self):
+      """ RHS for utemp equation. """
+      return rhs(self.form_utemp)
 
    @property
    def form_sh2(self):
@@ -156,24 +151,22 @@ class ElasticLF4(object):
       F = inner(self.v, self.s)*dx - self.g(self.v, self.utemp, self.I, self.n, self.l, self.mu, self.source)
       return F
 
-   def solve_sh2(self):
-      """ Solve for sh2. """
-      F = self.form_sh2
-      self.sh2.vector().set_local(numpy.dot(self.inverse_mass_stress.M.values, assemble(rhs(F)).vector().array()))
-      return
+   @cached_property
+   def rhs_sh2(self):
+      """ RHS for sh2 equation. """
+      return rhs(self.form_sh2)
 
    @property
    def form_s1(self):
       """ UFL for s1 equation. Note that we have multiplied through by dt here. """
       F = inner(self.v, self.s)*dx - inner(self.v, self.s0)*dx - self.dt*inner(self.v, self.sh1)*dx - ((self.dt**3)/24.0)*inner(self.v, self.sh2)*dx
       return F
-    
-   def solve_s1(self):
-      """ Solve for s1. """
-      F = self.form_s1
-      self.s1.vector().set_local(numpy.dot(self.inverse_mass_stress.M.values, assemble(rhs(F)).vector().array()))
-      return
-   
+
+   @cached_property
+   def rhs_s1(self):
+      """ RHS for s1 equation. """
+      return rhs(self.form_s1)
+
    def f(self, w, s0, u0, n, absorption=None):
       """ The RHS of the velocity equation. """
       f = -inner(grad(w), s0)*dx + inner(avg(s0)*n('+'), w('+'))*dS + inner(avg(s0)*n('-'), w('-'))*dS
@@ -187,6 +180,12 @@ class ElasticLF4(object):
       if(source):
          g += inner(v, source)*dx
       return g
+
+   def solve(self, rhs, matrix, result):
+      """ Solve by assembling RHS and applying inverse mass matrix. """
+      F_a = assemble(rhs)
+      F_d = numpy.dot(matrix.M.values, F_a.vector().array())
+      result.vector().set_local(F_d)
 
    def write(self, u=None, s=None):
       """ Write the velocity and/or stress fields to file. """
@@ -203,7 +202,7 @@ class ElasticLF4(object):
       
       # Pre-assemble the lumped mass matrices, which should stay constant throughout the simulation (assuming no mesh adaptivity).
       self.assemble_inverse_mass()
-      
+
       with timed_region('timestepping'):
          t = self.dt
          while t <= T + 1e-12:
@@ -217,18 +216,18 @@ class ElasticLF4(object):
             
             # Solve for the velocity vector field.
             with timed_region('velocity solve'):
-               self.solve_uh1()
-               self.solve_stemp()
-               self.solve_uh2()
-               self.solve_u1()
+               self.solve(self.rhs_uh1, self.inverse_mass_velocity, self.uh1)
+               self.solve(self.rhs_stemp, self.inverse_mass_stress, self.stemp)
+               self.solve(self.rhs_uh2, self.inverse_mass_velocity, self.uh2)
+               self.solve(self.rhs_u1, self.inverse_mass_velocity, self.u1)
                self.u0.assign(self.u1)
             
             # Solve for the stress tensor field.
             with timed_region('stress solve'):
-               self.solve_sh1()
-               self.solve_utemp()
-               self.solve_sh2()
-               self.solve_s1()
+               self.solve(self.rhs_sh1, self.inverse_mass_stress, self.sh1)
+               self.solve(self.rhs_utemp, self.inverse_mass_velocity, self.utemp)
+               self.solve(self.rhs_sh2, self.inverse_mass_stress, self.sh2)
+               self.solve(self.rhs_s1, self.inverse_mass_stress, self.s1)
                self.s0.assign(self.s1)
             
             # Write out the new fields
