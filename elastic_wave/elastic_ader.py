@@ -4,8 +4,18 @@ from pyop2 import *
 from pyop2.profiling import timed_region, summary
 op2.init(lazy_evaluation=False)
 from firedrake import *
+parameters["coffee"]["O2"] = False # FIXME: Remove this one this issue has been fixed: https://github.com/firedrakeproject/firedrake/issues/425
+parameters["assembly_cache"]["enabled"] = False
 import mpi4py
+import numpy
 from math import factorial
+
+# By Nas Banov, taken from http://stackoverflow.com/questions/3025162/statistics-combinations-in-python
+from operator import mul    # or mul=lambda x,y:x*y
+from fractions import Fraction
+def binomial(n,k): 
+  return int( reduce(mul, (Fraction(n-i, i+1) for i in range(k)), 1) )
+  
 
 class ElasticADER(object):
    """ Elastic wave equation solver using the finite element method and the ADER time-stepping scheme. """
@@ -46,7 +56,87 @@ class ElasticADER(object):
          # File output streams
          self.u_stream = File("velocity.pvd")
          self.s_stream = File("stress.pvd")
+
+   def Ax(self, k):
+      Ax = [[0, 0, 0, (self.l + 2*self.mu), 0],
+            [0, 0, 0, self.mu, 0],
+            [0, 0, 0, 0, self.mu],
+            [1.0, 0, 0, 0, 0],
+            [0, 0, 1.0, 0, 0]]
+      if k == 0:
+         # Identity matrix
+         Ax = [[1, 0, 0, 0, 0],
+               [0, 1, 0, 0, 0],
+               [0, 0, 1, 0, 0],
+               [0, 0, 0, 1, 0],
+               [0, 0, 0, 0, 1]]
+         Ax = numpy.array(Ax)
+      else:
+         Ax = numpy.array(Ax)
+         for i in range(1, k):
+            Ax = numpy.dot(Ax, Ax)   
+      return Ax
       
+   def Ay(self, k):
+      Ay = [[0, 0, 0, 0, self.l],
+            [0, 0, 0, 0, (self.l + 2*self.mu)],
+            [0, 0, 0, self.mu, 0],
+            [0, 0, 1.0, 0, 0],
+            [0, 1.0, 0, 0, 0]]
+      if k == 0:
+         # Identity matrix
+         Ay = [[1, 0, 0, 0, 0],
+               [0, 1, 0, 0, 0],
+               [0, 0, 1, 0, 0],
+               [0, 0, 0, 1, 0],
+               [0, 0, 0, 0, 1]]
+         Ay = numpy.array(Ay)
+      else:
+         Ay = numpy.array(Ay)
+         for i in range(1, k):
+            Ay = numpy.dot(Ay, Ay)   
+      return Ay
+
+   def binomial_expansion(self, k, variable):
+      F = 0
+      dim = self.u1.ufl_shape[0]
+      test = [self.v[0,0], self.v[1,1], self.v[0,1], self.w[0], self.w[1]]
+      
+      # Binomial expansion
+      for c in range(0, k+1):
+         Ax = self.Ax(k-c); Ay = self.Ay(c)
+         print "c = ", c
+         print Ax, Ay
+         ux = []; uy = []
+         
+         if k-c == 0:
+            ux = (1,)*5
+         else:
+            ux.append(self.s0[0,0].dx(*((0,)*(k-c))))
+            ux.append(self.s0[1,1].dx(*((0,)*(k-c))))
+            ux.append(self.s0[0,1].dx(*((0,)*(k-c))))
+            ux.append(self.u0[0].dx(*((0,)*(k-c))))
+            ux.append(self.u0[1].dx(*((0,)*(k-c))))
+            
+         if c == 0:
+            uy = (1,)*5
+         else:
+            uy.append(self.s0[0,0].dx(*((1,)*(c))))
+            uy.append(self.s0[1,1].dx(*((1,)*(c))))
+            uy.append(self.s0[0,1].dx(*((1,)*(c))))
+            uy.append(self.u0[0].dx(*((1,)*(c))))
+            uy.append(self.u0[1].dx(*((1,)*(c))))
+
+         bx = [0, 0, 0, 0, 0]; by = [0, 0, 0, 0, 0]
+         for i in range(len(ux)):
+            for j in range(len(ux)):
+               bx[i] += Ax[i][j]*ux[j]
+               by[i] += Ay[i][j]*uy[j]
+         
+         F += test[variable]*binomial(k, c)*bx[variable]*by[variable]*dx
+
+      return F
+
    @property
    def absorption(self):
       return self.absorption_function
@@ -61,43 +151,63 @@ class ElasticADER(object):
    def source(self, expression):
       self.source_function.interpolate(expression) 
 
-   @property
+
    def form_u1(self):
       """ UFL for u1 equation. """
-      T = 0
-      k = 2
+      T = Function(self.U)
+      k = 4
       for i in range(0, k+1): # k+1 because we need to include k here
-         T += ((self.dt**k)/factorial(k))*self.dudt_k(k) # Re-write the time derivative in terms of spatial derivatives.
+         T += ((self.dt**i)/factorial(i))*self.dudt_k(i) # Re-write the time derivative in terms of spatial derivatives.
       F = self.density*inner(self.w, self.u - T)*dx
       return F
-   @property
-   def solver_u1(self):
+
+   def solver_u1(self, F):
       """ Solver object for u1. """
-      F = self.form_u1
       problem = LinearVariationalProblem(lhs(F), rhs(F), self.u1)
       return LinearVariationalSolver(problem)
-   
-   def f(self, w, s0, u0, n, absorption=None):
+
+   def form_s1(self):
+      """ UFL for s1 equation. """
+      T = Function(self.S)
+      k = 4
+      for i in range(0, k+1): # k+1 because we need to include k here
+         T += ((self.dt**i)/factorial(i))*self.dsdt_k(i) # Re-write the time derivative in terms of spatial derivatives.
+      F = inner(self.v, self.s - T)*dx
+      return F
+
+   def solver_s1(self, F):
+      """ Solver object for s1. """
+      problem = LinearVariationalProblem(lhs(F), rhs(F), self.s1)
+      return LinearVariationalSolver(problem)
+      
+   def f(self, w, s0, u0, n, order, absorption=None):
       """ The RHS of the velocity equation. """
-      f = -inner(grad(w), s0)*dx + inner(avg(s0)*n('+'), w('+'))*dS + inner(avg(s0)*n('-'), w('-'))*dS
-      if(absorption):
-         f += -inner(w, absorption*u0)*dx
+      f = self.binomial_expansion(order, 3) + self.binomial_expansion(order, 4)
       return f
-   
-   def g(self, v, u1, I, n, l, mu, source=None):
+      
+   def g(self, v, u1, I, n, l, mu, order, source=None):
       """ The RHS of the stress equation. """
-      g =  - l*(v[i,j]*I[i,j]).dx(k)*u1[k]*dx + l*(jump(v[i,j], n[k])*I[i,j]*avg(u1[k]))*dS + l*(v[i,j]*I[i,j]*u1[k]*n[k])*ds - mu*inner(div(v), u1)*dx + mu*inner(avg(u1), jump(v, n))*dS - mu*inner(div(v.T), u1)*dx + mu*inner(avg(u1), jump(v.T, n))*dS + mu*inner(u1, dot(v, n))*ds + mu*inner(u1, dot(v.T, n))*ds
-      if(source):
-         g += inner(v, source)*dx
+      g = self.binomial_expansion(order, 0) + self.binomial_expansion(order, 1) + self.binomial_expansion(order, 2)
       return g
 
    def dudt_k(self, k):
       """ Recursively compute (d^k)u/(dt^k). """
       if k == 0:
          return self.u0
-      else:
-         return self.f(self.w, self.s0, self.u0, self.n)*self.dudt_k(k-1)
-         
+      if k >= 1:
+         temp = Function(self.U)
+         solve(inner(self.w, self.u)*dx == self.f(self.w, self.s0, self.u0, self.n, k), temp)         
+         return temp
+
+   def dsdt_k(self, k):
+      """ Recursively compute (d^k)s/(dt^k). """
+      if k == 0:
+         return self.s0
+      if k >= 1:
+         temp = Function(self.S)
+         solve(inner(self.v, self.s)*dx == self.g(self.v, self.u1, self.I, self.n, self.l, self.mu, k), temp)
+         return temp
+      
    def write(self, u=None, s=None):
       """ Write the velocity and/or stress fields to file. """
       with timed_region('i/o'):
@@ -109,12 +219,7 @@ class ElasticADER(object):
 
    def run(self, T):
       """ Run the elastic wave simulation until t = T. """
-      self.write(self.u1, self.s1.split()[0]) # Write out the initial condition.
-      
-      # Construct the solver objects outside of the time-stepping loop.
-      with timed_region('solver setup'):
-         solver_u1 = self.solver_u1
-         #solver_s1 = self.solver_s1
+      #self.write(self.u1, self.s1.split()[0]) # Write out the initial condition.
       
       with timed_region('timestepping'):
          t = self.dt
@@ -129,13 +234,17 @@ class ElasticADER(object):
             
             # Solve for the velocity vector field.
             with timed_region('velocity solve'):
-               solver_u1.solve()
+               F = self.form_u1()
+               solver = self.solver_u1(F)
+               solver.solve()
                self.u0.assign(self.u1)
-            
+               #sys.exit()
             # Solve for the stress tensor field.
-            #with timed_region('stress solve'):
-            #   solver_s1.solve()
-            #   self.s0.assign(self.s1)
+            with timed_region('stress solve'):
+               F = self.form_s1()
+               solver = self.solver_s1(F)
+               solver.solve()
+               self.s0.assign(self.s1)
             
             # Write out the new fields
             self.write(self.u1, self.s1.split()[0])
