@@ -1,16 +1,24 @@
 from eigenmode_2d import Eigenmode2DLF4
 from pybench import Benchmark, parser
 from pyop2.profiling import get_timers
-from firedrake import op2
+from firedrake import *
+
+parameters["pyop2_options"]["profiling"] = True
+parameters["pyop2_options"]["lazy_evaluation"] = False
 
 class EigenmodeBench(Benchmark):
-    warmups = 0
-    repeats = 1
+    warmups = 1
+    repeats = 3
 
     method = 'eigenmode2d'
     benchmark = 'Eigenmode2DLF4'
+    params = [('degree', range(1, 5))]
 
     def eigenmode2d(self, N=4, degree=1, dt=0.125, T=2.0):
+        self.series['size'] = N
+        self.series['dt'] = dt
+        self.series['T'] = T
+
         eigen = Eigenmode2DLF4(N, degree, dt)
         eigen.eigenmode2d(T=T)
 
@@ -19,7 +27,7 @@ class EigenmodeBench(Benchmark):
 
 
 if __name__ == '__main__':
-    op2.init(log_level='WARNING')
+    op2.init(log_level='ERROR')
     from ffc.log import set_level
     set_level('ERROR')
 
