@@ -74,10 +74,11 @@ class ElasticLF4(object):
       # Inverse of the (consistent) mass matrix for the velocity equation.
       self.inverse_mass_velocity = assemble(inner(self.w, self.u)*dx, inverse=True)
       self.inverse_mass_velocity.assemble()
+      self.imass_velocity = self.inverse_mass_velocity.M
       # Inverse of the (consistent) mass matrix for the stress equation.
       self.inverse_mass_stress = assemble(inner(self.v, self.s)*dx, inverse=True)
       self.inverse_mass_stress.assemble()
-      return
+      self.imass_stress = self.inverse_mass_stress.M
       
    @property
    def form_uh1(self):
@@ -184,8 +185,9 @@ class ElasticLF4(object):
    def solve(self, rhs, matrix, result):
       """ Solve by assembling RHS and applying inverse mass matrix. """
       F_a = assemble(rhs)
-      F_d = numpy.dot(matrix.M.values, F_a.vector().array())
-      result.vector().set_local(F_d)
+      with result.vector().dat.vec as res:
+         with F_a.vector().dat.vec as F_v:
+            matrix.handle.mult(F_v, res)
 
    def write(self, u=None, s=None):
       """ Write the velocity and/or stress fields to file. """
@@ -216,18 +218,18 @@ class ElasticLF4(object):
             
             # Solve for the velocity vector field.
             with timed_region('velocity solve'):
-               self.solve(self.rhs_uh1, self.inverse_mass_velocity, self.uh1)
-               self.solve(self.rhs_stemp, self.inverse_mass_stress, self.stemp)
-               self.solve(self.rhs_uh2, self.inverse_mass_velocity, self.uh2)
-               self.solve(self.rhs_u1, self.inverse_mass_velocity, self.u1)
+               self.solve(self.rhs_uh1, self.imass_velocity, self.uh1)
+               self.solve(self.rhs_stemp, self.imass_stress, self.stemp)
+               self.solve(self.rhs_uh2, self.imass_velocity, self.uh2)
+               self.solve(self.rhs_u1, self.imass_velocity, self.u1)
                self.u0.assign(self.u1)
             
             # Solve for the stress tensor field.
             with timed_region('stress solve'):
-               self.solve(self.rhs_sh1, self.inverse_mass_stress, self.sh1)
-               self.solve(self.rhs_utemp, self.inverse_mass_velocity, self.utemp)
-               self.solve(self.rhs_sh2, self.inverse_mass_stress, self.sh2)
-               self.solve(self.rhs_s1, self.inverse_mass_stress, self.s1)
+               self.solve(self.rhs_sh1, self.imass_stress, self.sh1)
+               self.solve(self.rhs_utemp, self.imass_velocity, self.utemp)
+               self.solve(self.rhs_sh2, self.imass_stress, self.sh2)
+               self.solve(self.rhs_s1, self.imass_stress, self.s1)
                self.s0.assign(self.s1)
             
             # Write out the new fields
