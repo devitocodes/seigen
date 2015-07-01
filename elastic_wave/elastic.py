@@ -202,8 +202,10 @@ class ElasticLF4(object):
       """ Run the elastic wave simulation until t = T. """
       #self.write(self.u1, self.s1) # Write out the initial condition.
       
-      # Pre-assemble the lumped mass matrices, which should stay constant throughout the simulation (assuming no mesh adaptivity).
-      self.assemble_inverse_mass()
+      # Pre-assemble the lumped mass matrices, which should stay
+      # constant throughout the simulation (assuming no mesh adaptivity).
+      with timed_region('inverse mass matrix'):
+         self.assemble_inverse_mass()
 
       with timed_region('timestepping'):
          t = self.dt
