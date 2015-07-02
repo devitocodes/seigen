@@ -7,11 +7,11 @@ from elastic_wave.helpers import *
 
 class Eigenmode2DLF4():
 
-   def __init__(self, N, degree, dt):
+   def __init__(self, N, degree, dt, explicit=True):
       with timed_region('mesh generation'):
          self.mesh = UnitSquareMesh(N, N)
 
-      self.elastic = ElasticLF4(self.mesh, "DG", degree, dimension=2)
+      self.elastic = ElasticLF4(self.mesh, "DG", degree, dimension=2, explicit=explicit)
 
       # Constants
       self.elastic.density = 1.0

@@ -14,12 +14,13 @@ class EigenmodeBench(Benchmark):
     benchmark = 'Eigenmode2DLF4'
     params = [('degree', range(1, 5))]
 
-    def eigenmode2d(self, N=4, degree=1, dt=0.125, T=2.0):
+    def eigenmode2d(self, N=4, degree=1, dt=0.125, T=2.0, explicit=True):
         self.series['size'] = N
         self.series['dt'] = dt
         self.series['T'] = T
+        self.series['explicit'] = explicit
 
-        eigen = Eigenmode2DLF4(N, degree, dt)
+        eigen = Eigenmode2DLF4(N, degree, dt, explicit=explicit)
         eigen.eigenmode2d(T=T)
 
         for task, timer in get_timers(reset=True).items():

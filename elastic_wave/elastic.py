@@ -11,10 +11,11 @@ import numpy
 class ElasticLF4(object):
    """ Elastic wave equation solver using the finite element method and a fourth-order leap-frog time-stepping scheme. """
 
-   def __init__(self, mesh, family, degree, dimension):
+   def __init__(self, mesh, family, degree, dimension, explicit=True):
       with timed_region('function setup'):
          self.mesh = mesh
          self.dimension = dimension
+         self.explicit = explicit
 
          self.S = TensorFunctionSpace(mesh, family, degree)
          self.U = VectorFunctionSpace(mesh, family, degree)
@@ -115,8 +116,12 @@ class ElasticLF4(object):
 
    @property
    def form_u1(self):
-      """ UFL for u1 equation. Note that we have multiplied through by dt here. """
-      F = self.density*inner(self.w, self.u)*dx - self.density*inner(self.w, self.u0)*dx - self.dt*inner(self.w, self.uh1)*dx - ((self.dt**3)/24.0)*inner(self.w, self.uh2)*dx
+      """ UFL for u1 equation. """
+      if self.explicit:
+         #"Note that we have multiplied through by dt here. """
+         F = self.density*inner(self.w, self.u)*dx - self.density*inner(self.w, self.u0)*dx - self.dt*inner(self.w, self.uh1)*dx - ((self.dt**3)/24.0)*inner(self.w, self.uh2)*dx
+      else:
+         F = self.density*inner(self.w, (self.u - self.u0)/self.dt)*dx - inner(self.w, self.uh1)*dx - ((self.dt**2)/24.0)*inner(self.w, self.uh2)*dx
       return F
 
    @cached_property
@@ -159,8 +164,12 @@ class ElasticLF4(object):
 
    @property
    def form_s1(self):
-      """ UFL for s1 equation. Note that we have multiplied through by dt here. """
-      F = inner(self.v, self.s)*dx - inner(self.v, self.s0)*dx - self.dt*inner(self.v, self.sh1)*dx - ((self.dt**3)/24.0)*inner(self.v, self.sh2)*dx
+      """ UFL for s1 equation. """
+      if self.explicit:
+         # Note that we have multiplied through by dt here. """
+         F = inner(self.v, self.s)*dx - inner(self.v, self.s0)*dx - self.dt*inner(self.v, self.sh1)*dx - ((self.dt**3)/24.0)*inner(self.v, self.sh2)*dx
+      else:
+         F = inner(self.v, (self.s - self.s0)/self.dt)*dx - inner(self.v, self.sh1)*dx - ((self.dt**2)/24.0)*inner(self.v, self.sh2)*dx
       return F
 
    @cached_property
@@ -189,6 +198,11 @@ class ElasticLF4(object):
          with F_a.vector().dat.vec as F_v:
             matrix.handle.mult(F_v, res)
 
+   def create_solver(self, form, result):
+      """ Create a solver object for a given form. """
+      problem = LinearVariationalProblem(lhs(form), rhs(form), result)
+      return LinearVariationalSolver(problem)
+
    def write(self, u=None, s=None):
       """ Write the velocity and/or stress fields to file. """
       with timed_region('i/o'):
@@ -201,11 +215,24 @@ class ElasticLF4(object):
    def run(self, T):
       """ Run the elastic wave simulation until t = T. """
       #self.write(self.u1, self.s1) # Write out the initial condition.
-      
-      # Pre-assemble the lumped mass matrices, which should stay
-      # constant throughout the simulation (assuming no mesh adaptivity).
-      with timed_region('inverse mass matrix'):
-         self.assemble_inverse_mass()
+
+      if self.explicit:
+         print "Generating inverse mass matrix"
+         # Pre-assemble the lumped mass matrices, which should stay
+         # constant throughout the simulation (assuming no mesh adaptivity).
+         with timed_region('inverse mass matrix'):
+            self.assemble_inverse_mass()
+      else:
+         print "Creating solver contexts"
+         with timed_region('solver setup'):
+            solver_uh1 = self.create_solver(self.form_uh1, self.uh1)
+            solver_stemp = self.create_solver(self.form_stemp, self.stemp)
+            solver_uh2 = self.create_solver(self.form_uh2, self.uh2)
+            solver_u1 = self.create_solver(self.form_u1, self.u1)
+            solver_sh1 = self.create_solver(self.form_sh1, self.sh1)
+            solver_utemp = self.create_solver(self.form_utemp, self.utemp)
+            solver_sh2 = self.create_solver(self.form_sh2, self.sh2)
+            solver_s1 = self.create_solver(self.form_s1, self.s1)
 
       with timed_region('timestepping'):
          t = self.dt
@@ -219,20 +246,34 @@ class ElasticLF4(object):
                   self.source = self.source_expression
             
             # Solve for the velocity vector field.
-            with timed_region('velocity solve'):
-               self.solve(self.rhs_uh1, self.imass_velocity, self.uh1)
-               self.solve(self.rhs_stemp, self.imass_stress, self.stemp)
-               self.solve(self.rhs_uh2, self.imass_velocity, self.uh2)
-               self.solve(self.rhs_u1, self.imass_velocity, self.u1)
-               self.u0.assign(self.u1)
+            if self.explicit:
+               with timed_region('velocity solve'):
+                  self.solve(self.rhs_uh1, self.imass_velocity, self.uh1)
+                  self.solve(self.rhs_stemp, self.imass_stress, self.stemp)
+                  self.solve(self.rhs_uh2, self.imass_velocity, self.uh2)
+                  self.solve(self.rhs_u1, self.imass_velocity, self.u1)
+            else:
+               with timed_region('velocity solve'):
+                  solver_uh1.solve()
+                  solver_stemp.solve()
+                  solver_uh2.solve()
+                  solver_u1.solve()
+            self.u0.assign(self.u1)
             
             # Solve for the stress tensor field.
-            with timed_region('stress solve'):
-               self.solve(self.rhs_sh1, self.imass_stress, self.sh1)
-               self.solve(self.rhs_utemp, self.imass_velocity, self.utemp)
-               self.solve(self.rhs_sh2, self.imass_stress, self.sh2)
-               self.solve(self.rhs_s1, self.imass_stress, self.s1)
-               self.s0.assign(self.s1)
+            if self.explicit:
+               with timed_region('stress solve'):
+                  self.solve(self.rhs_sh1, self.imass_stress, self.sh1)
+                  self.solve(self.rhs_utemp, self.imass_velocity, self.utemp)
+                  self.solve(self.rhs_sh2, self.imass_stress, self.sh2)
+                  self.solve(self.rhs_s1, self.imass_stress, self.s1)
+            else:
+               with timed_region('stress solve'):
+                  solver_sh1.solve()
+                  solver_utemp.solve()
+                  solver_sh2.solve()
+                  solver_s1.solve()
+            self.s0.assign(self.s1)
             
             # Write out the new fields
             #self.write(self.u1, self.s1)
