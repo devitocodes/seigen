@@ -11,11 +11,12 @@ import numpy
 class ElasticLF4(object):
    """ Elastic wave equation solver using the finite element method and a fourth-order leap-frog time-stepping scheme. """
 
-   def __init__(self, mesh, family, degree, dimension, explicit=True):
+   def __init__(self, mesh, family, degree, dimension, explicit=True, output=True):
       with timed_region('function setup'):
          self.mesh = mesh
          self.dimension = dimension
          self.explicit = explicit
+         self.output = output
 
          self.S = TensorFunctionSpace(mesh, family, degree)
          self.U = VectorFunctionSpace(mesh, family, degree)
@@ -50,10 +51,11 @@ class ElasticLF4(object):
          self.n = FacetNormal(self.mesh)
          self.I = Identity(self.dimension)
 
-      with timed_region('i/o'):
-         # File output streams
-         self.u_stream = File("velocity.pvd")
-         self.s_stream = File("stress.pvd")
+      if self.output:
+         with timed_region('i/o'):
+            # File output streams
+            self.u_stream = File("velocity.pvd")
+            self.s_stream = File("stress.pvd")
       
    # Absorption coefficient sigma for the absorption term: sigma*velocity
    @property
@@ -205,16 +207,17 @@ class ElasticLF4(object):
 
    def write(self, u=None, s=None):
       """ Write the velocity and/or stress fields to file. """
-      with timed_region('i/o'):
-         if(u):
-            self.u_stream << u
-         if(s):
-            pass # FIXME: Cannot currently write tensor valued fields to a VTU file. See https://github.com/firedrakeproject/firedrake/issues/538
+      if self.output:
+         with timed_region('i/o'):
+            if(u):
+               self.u_stream << u
+            if(s):
+               pass # FIXME: Cannot currently write tensor valued fields to a VTU file. See https://github.com/firedrakeproject/firedrake/issues/538
             #self.s_stream << s
 
    def run(self, T):
       """ Run the elastic wave simulation until t = T. """
-      #self.write(self.u1, self.s1) # Write out the initial condition.
+      self.write(self.u1, self.s1) # Write out the initial condition.
 
       if self.explicit:
          print "Generating inverse mass matrix"
@@ -276,7 +279,7 @@ class ElasticLF4(object):
             self.s0.assign(self.s1)
             
             # Write out the new fields
-            #self.write(self.u1, self.s1)
+            self.write(self.u1, self.s1)
             
             # Move onto next timestep
             t += self.dt

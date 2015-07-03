@@ -20,7 +20,7 @@ class EigenmodeBench(Benchmark):
         self.series['T'] = T
         self.series['explicit'] = explicit
 
-        eigen = Eigenmode2DLF4(N, degree, dt, explicit=explicit)
+        eigen = Eigenmode2DLF4(N, degree, dt, explicit=explicit, output=False)
         eigen.eigenmode2d(T=T)
 
         for task, timer in get_timers(reset=True).items():
