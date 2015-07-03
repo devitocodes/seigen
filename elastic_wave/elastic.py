@@ -120,7 +120,7 @@ class ElasticLF4(object):
    def form_u1(self):
       """ UFL for u1 equation. """
       if self.explicit:
-         #"Note that we have multiplied through by dt here. """
+         # Note that we have multiplied through by dt here.
          F = self.density*inner(self.w, self.u)*dx - self.density*inner(self.w, self.u0)*dx - self.dt*inner(self.w, self.uh1)*dx - ((self.dt**3)/24.0)*inner(self.w, self.uh2)*dx
       else:
          F = self.density*inner(self.w, (self.u - self.u0)/self.dt)*dx - inner(self.w, self.uh1)*dx - ((self.dt**2)/24.0)*inner(self.w, self.uh2)*dx
@@ -168,7 +168,7 @@ class ElasticLF4(object):
    def form_s1(self):
       """ UFL for s1 equation. """
       if self.explicit:
-         # Note that we have multiplied through by dt here. """
+         # Note that we have multiplied through by dt here.
          F = inner(self.v, self.s)*dx - inner(self.v, self.s0)*dx - self.dt*inner(self.v, self.sh1)*dx - ((self.dt**3)/24.0)*inner(self.v, self.sh2)*dx
       else:
          F = inner(self.v, (self.s - self.s0)/self.dt)*dx - inner(self.v, self.sh1)*dx - ((self.dt**2)/24.0)*inner(self.v, self.sh2)*dx
@@ -213,7 +213,7 @@ class ElasticLF4(object):
                self.u_stream << u
             if(s):
                pass # FIXME: Cannot currently write tensor valued fields to a VTU file. See https://github.com/firedrakeproject/firedrake/issues/538
-            #self.s_stream << s
+               #self.s_stream << s
 
    def run(self, T):
       """ Run the elastic wave simulation until t = T. """
@@ -221,7 +221,7 @@ class ElasticLF4(object):
 
       if self.explicit:
          print "Generating inverse mass matrix"
-         # Pre-assemble the lumped mass matrices, which should stay
+         # Pre-assemble the inverse mass matrices, which should stay
          # constant throughout the simulation (assuming no mesh adaptivity).
          with timed_region('inverse mass matrix'):
             self.assemble_inverse_mass()
