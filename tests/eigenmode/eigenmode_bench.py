@@ -3,6 +3,7 @@ from eigenmode_3d import Eigenmode3DLF4
 from pybench import Benchmark, parser
 from pyop2.profiling import get_timers
 from firedrake import *
+import mpi4py
 
 parameters["pyop2_options"]["profiling"] = True
 parameters["pyop2_options"]["lazy_evaluation"] = False
@@ -30,13 +31,23 @@ class EigenmodeBench(Benchmark):
 
         if dim == 2:
             eigen = Eigenmode2DLF4(N, degree, dt, explicit=explicit, output=False)
-            eigen.eigenmode2d(T=T)
+            u1, s1 = eigen.eigenmode2d(T=T)
         elif dim == 3:
             eigen = Eigenmode3DLF4(N, degree, dt, explicit=explicit, output=False)
-            eigen.eigenmode3d(T=T)
+            u1, s1 = eigen.eigenmode3d(T=T)
 
         for task, timer in get_timers(reset=True).items():
             self.register_timing(task, timer.total)
+
+        self.meta['dofs'] = op2.MPI.comm.allreduce(eigen.elastic.S.dof_count, op=mpi4py.MPI.SUM)
+        try:
+            u_error, s_error = eigen.eigenmode_error(u1, s1)
+            self.meta['u_error'] = u_error
+            self.meta['s_error'] = s_error
+        except RuntimeError:
+            print "WARNING: Couldn't establish error norm"
+            self.meta['u_error'] = 'NaN'
+            self.meta['s_error'] = 'NaN'
 
 
 if __name__ == '__main__':
