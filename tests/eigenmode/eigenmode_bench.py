@@ -16,16 +16,21 @@ class EigenmodeBench(Benchmark):
 
     method = 'eigenmode'
     benchmark = 'EigenmodeLF4'
-    params = [('degree', range(1, 5))]
 
     def eigenmode(self, dim=3, N=3, degree=1, dt=0.125, T=2.0,
-                    explicit=True, O3=False):
+                  explicit=True, O3=False):
         self.series['dim'] = dim
         self.series['size'] = N
-        self.series['dt'] = dt
         self.series['T'] = T
         self.series['explicit'] = explicit
         self.series['O3'] = O3
+        self.series['degree'] = degree
+
+        # If dt is supressed (<0) Infer it based on Courant number
+        if dt < 0:
+            # Courant number of 0.5: (dx*C)/Vp
+            dt = 0.5*(1.0/N)/(2.0**(degree-1))
+        self.series['dt'] = dt
 
         parameters["coffee"]["O3"] = O3
 
