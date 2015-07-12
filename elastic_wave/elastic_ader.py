@@ -59,7 +59,7 @@ class ElasticADER(object):
 
    def Ax(self, k):
       Ax = [[0, 0, 0, (self.l + 2*self.mu), 0],
-            [0, 0, 0, self.mu, 0],
+            [0, 0, 0, self.l, 0],
             [0, 0, 0, 0, self.mu],
             [1.0, 0, 0, 0, 0],
             [0, 0, 1.0, 0, 0]]
@@ -100,7 +100,9 @@ class ElasticADER(object):
    def binomial_expansion(self, k, variable):
       F = 0
       dim = self.u1.ufl_shape[0]
-      test = [self.v[0,0], self.v[1,1], self.v[0,1], self.w[0], self.w[1]]
+      
+      testx = [self.v[0,0], self.v[1,1], self.v[0,1], self.w[0], self.w[1]]
+      testy = [self.v[0,0].dx(1), self.v[1,1].dx(1), self.v[0,1].dx(1), self.w[0].dx(1), self.w[1].dx(1)]
       
       # Binomial expansion
       for c in range(0, k+1):
@@ -127,13 +129,12 @@ class ElasticADER(object):
             uy.append(self.u0[0].dx(*((1,)*(c))))
             uy.append(self.u0[1].dx(*((1,)*(c))))
 
-         bx = [0, 0, 0, 0, 0]; by = [0, 0, 0, 0, 0]
-         for i in range(len(ux)):
-            for j in range(len(ux)):
-               bx[i] += Ax[i][j]*ux[j]
-               by[i] += Ay[i][j]*uy[j]
+         bx = 0; by = 0
+         for j in range(len(testx)):
+            bx += Ax[variable][j]*ux[j]
+            by += Ay[variable][j]*uy[j]
          
-         F += test[variable]*binomial(k, c)*bx[variable]*by[variable]*dx
+         F += testx[variable]*binomial(k, c)*bx*by*dx
 
       return F
 
@@ -155,7 +156,7 @@ class ElasticADER(object):
    def form_u1(self):
       """ UFL for u1 equation. """
       T = Function(self.U)
-      k = 4
+      k = 2
       for i in range(0, k+1): # k+1 because we need to include k here
          T += ((self.dt**i)/factorial(i))*self.dudt_k(i) # Re-write the time derivative in terms of spatial derivatives.
       F = self.density*inner(self.w, self.u - T)*dx
@@ -169,7 +170,7 @@ class ElasticADER(object):
    def form_s1(self):
       """ UFL for s1 equation. """
       T = Function(self.S)
-      k = 4
+      k = 1
       for i in range(0, k+1): # k+1 because we need to include k here
          T += ((self.dt**i)/factorial(i))*self.dsdt_k(i) # Re-write the time derivative in terms of spatial derivatives.
       F = inner(self.v, self.s - T)*dx
