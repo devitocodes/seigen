@@ -20,8 +20,10 @@ if __name__ == '__main__':
     dim = args.dim
     degrees = args.degree or [1, 2, 3, 4]
     regions = ['stress solve', 'velocity solve', 'timestepping']
-    labels = {(False, False): 'Implicit', (False, True): 'Explicit',
-              (True, True): 'Explicit, zero-tracking'}
+    labels = {(2, False): 'Implicit',
+              (2, True): 'Explicit',
+              (3, True): 'Explicit, zero-tracking',
+              (4, True): 'Explicit, coffee-O4'}
 
     b = EigenmodePlot(benchmark='Eigenmode2D-Performance',
                       resultsdir=args.resultsdir, plotdir=args.plotdir)
@@ -45,7 +47,7 @@ if __name__ == '__main__':
             r = EigenmodePlot(benchmark='Eigenmode2D-Performance',
                               resultsdir=args.resultsdir, plotdir=args.plotdir)
             r.combine_series([('dim', [dim]), ('degree', [d]), ('size', [N]), ('dt', dt),
-                              ('T', [5.0]), ('explicit', [True]), ('O3', [True])],
+                              ('T', [5.0]), ('explicit', [True]), ('opt', [2, 3, 4])],
                              filename='EigenmodeLF4')
             if len(r.result['timings']) > 0:
                 # Record err and cost for each d-N combination we can find
@@ -120,10 +122,10 @@ if __name__ == '__main__':
 
     else:
         # Bar comparison between explicit/implicit and coffe -O3 parameters
-        groups = ['explicit', 'O3']
+        groups = ['explicit', 'opt']
         b.combine_series([('dim', [dim]), ('size', args.size or [32]), ('degree', degrees),
                           ('dt', [0.125]), ('T', args.time or [2.0]),
-                          ('explicit', [False, True]), ('O3', [False, True])],
+                          ('explicit', [False, True]), ('opt', [2, 3, 4])],
                          filename='EigenmodeLF4')
 
         degree_str = ['P%s-DG' % d for d in degrees]
