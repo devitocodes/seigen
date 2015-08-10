@@ -32,7 +32,8 @@ class ElasticLF4(object):
          self.S = TensorFunctionSpace(mesh, family, degree)
          self.U = VectorFunctionSpace(mesh, family, degree)
          # Assumes that the S and U function spaces are the same.
-         print "Number of degrees of freedom: %d" % op2.MPI.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
+         dofs = op2.MPI.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
+         self.log("Number of degrees of freedom: %d" % dofs)
 
          self.s = TrialFunction(self.S)
          self.v = TestFunction(self.S)
@@ -67,6 +68,10 @@ class ElasticLF4(object):
             # File output streams
             self.u_stream = File("velocity.pvd")
             self.s_stream = File("stress.pvd")
+
+   def log(self, s):
+      if op2.MPI.comm.rank == 0:
+         print s
       
    @property
    def absorption(self):
@@ -261,13 +266,13 @@ class ElasticLF4(object):
       self.write(self.u1, self.s1) # Write out the initial condition.
 
       if self.explicit:
-         print "Generating inverse mass matrix"
+         self.log("Generating inverse mass matrix")
          # Pre-assemble the inverse mass matrices, which should stay
          # constant throughout the simulation (assuming no mesh adaptivity).
          with timed_region('inverse mass matrix'):
             self.assemble_inverse_mass()
       else:
-         print "Creating solver contexts"
+         self.log("Creating solver contexts")
          with timed_region('solver setup'):
             solver_uh1 = self.create_solver(self.form_uh1, self.uh1)
             solver_stemp = self.create_solver(self.form_stemp, self.stemp)
@@ -281,7 +286,7 @@ class ElasticLF4(object):
       with timed_region('timestepping'):
          t = self.dt
          while t <= T + 1e-12:
-            print "t = %f" % t
+            self.log("t = %f" % t)
             
             # In case the source is time-dependent, update the time 't' here.
             if(self.source):
