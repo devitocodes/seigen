@@ -19,6 +19,7 @@ class EigenmodeBench(Benchmark):
 
     def eigenmode(self, dim=3, N=3, degree=1, dt=0.125, T=2.0,
                   explicit=True, opt=2):
+        self.series['np'] = op2.MPI.comm.size
         self.series['dim'] = dim
         self.series['size'] = N
         self.series['T'] = T
