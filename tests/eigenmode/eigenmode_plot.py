@@ -1,5 +1,5 @@
-from pybench import parser
 from eigenmode_bench import EigenmodeBench
+from pybench import parser
 
 class EigenmodePlot(EigenmodeBench):
     figsize = (6, 4)
@@ -19,6 +19,7 @@ if __name__ == '__main__':
     args = p.parse_args()
     dim = args.dim
     degrees = args.degree or [1, 2, 3, 4]
+    nprocs = args.parallel or [1]
     regions = ['stress solve', 'velocity solve', 'timestepping']
     labels = {(2, False): 'Implicit',
               (2, True): 'Explicit',
@@ -123,8 +124,8 @@ if __name__ == '__main__':
     else:
         # Bar comparison between explicit/implicit and coffe -O3 parameters
         groups = ['explicit', 'opt']
-        b.combine_series([('dim', [dim]), ('size', args.size or [32]), ('degree', degrees),
-                          ('dt', [0.125]), ('T', args.time or [2.0]),
+        b.combine_series([('np', nprocs), ('dim', [dim]), ('size', args.size or [32]),
+                          ('degree', degrees), ('dt', [0.125]), ('T', args.time or [2.0]),
                           ('explicit', [False, True]), ('opt', [2, 3, 4])],
                          filename='EigenmodeLF4')
 
