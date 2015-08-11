@@ -9,9 +9,20 @@ import mpi4py
 import numpy
 
 class ElasticLF4(object):
-   """ Elastic wave equation solver using the finite element method and a fourth-order leap-frog time-stepping scheme. """
+   r""" An elastic wave equation solver, using the finite element method for spatial discretisation,
+   and a fourth-order leap-frog time-stepping scheme. """
 
    def __init__(self, mesh, family, degree, dimension, explicit=True, output=True):
+      r""" Initialise a new elastic wave simulation.
+      
+      :param mesh: The underlying computational mesh of vertices and edges.
+      :param str family: Specify whether CG or DG should be used.
+      :param int degree: Use polynomial basis functions of this degree.
+      :param int dimension: The spatial dimension of the problem (1, 2 or 3).
+      :param bool explicit: If False, use PETSc to solve for the solution fields. Otherwise, explicitly invert the mass matrix and perform a matrix-vector multiplication to get the solution.
+      :param bool output: If True, output the solution fields to a file.
+      :returns: None
+      """
       with timed_region('function setup'):
          self.mesh = mesh
          self.dimension = dimension
@@ -57,23 +68,38 @@ class ElasticLF4(object):
             self.u_stream = File("velocity.pvd")
             self.s_stream = File("stress.pvd")
       
-   # Absorption coefficient sigma for the absorption term: sigma*velocity
    @property
    def absorption(self):
+      r""" The absorption coefficient :math:`\sigma` for the absorption term
+      
+       .. math:: \sigma\mathbf{u}
+       
+      where :math:`\mathbf{u}` is the velocity field.
+      """
       return self.absorption_function
    @absorption.setter
    def absorption(self, expression):
+      r""" Setter function for the absorption field. 
+      :param firedrake.Expression expression: The expression to interpolate onto the absorption field.
+      """
       self.absorption_function.interpolate(expression)
       
    # Source term
    @property
    def source(self):
+      r""" The source term on the RHS of the velocity (or stress) equation. """
       return self.source_function
    @source.setter
    def source(self, expression):
+      r""" Setter function for the source field. 
+      :param firedrake.Expression expression: The expression to interpolate onto the source field.
+      """
       self.source_function.interpolate(expression) 
 
    def assemble_inverse_mass(self):
+      r""" Compute the inverse of the consistent mass matrix for the velocity and stress equations.
+      :returns: None
+      """
       # Inverse of the (consistent) mass matrix for the velocity equation.
       self.inverse_mass_velocity = assemble(inner(self.w, self.u)*dx, inverse=True)
       self.inverse_mass_velocity.assemble()
@@ -201,7 +227,11 @@ class ElasticLF4(object):
             matrix.handle.mult(F_v, res)
 
    def create_solver(self, form, result):
-      """ Create a solver object for a given form. """
+      r""" Create a solver object for a given form.
+      :param ufl.Form form: The weak form of the equation that needs solving.
+      :param firedrake.Function result: The field that will hold the solution.
+      :returns: A LinearVariationalSolver object associated with the problem.
+      """
       problem = LinearVariationalProblem(lhs(form), rhs(form), result)
       return LinearVariationalSolver(problem)
 
@@ -216,7 +246,10 @@ class ElasticLF4(object):
                #self.s_stream << s
 
    def run(self, T):
-      """ Run the elastic wave simulation until t = T. """
+      """ Run the elastic wave simulation until t = T.
+      :param float T: The finish time of the simulation.
+      :returns: The final solution fields for velocity and stress.
+      """
       self.write(self.u1, self.s1) # Write out the initial condition.
 
       if self.explicit:
