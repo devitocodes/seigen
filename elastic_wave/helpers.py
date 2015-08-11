@@ -5,10 +5,10 @@ def Vp(mu, l, density):
 
     .. math:: \sqrt{\frac{(\lambda + 2\mu)}{\rho}}
 
-   where :math:`\rho` is the density, and :math:`\lambda` and :math:`\mu` are the first and second Lamé parameters, respectively.
+   where :math:`\rho` is the density, and :math:`\lambda` and :math:`\mu` are the first and second Lame parameters, respectively.
 
-   :param mu: The second Lamé parameter.
-   :param l: The first Lamé parameter.
+   :param mu: The second Lame parameter.
+   :param l: The first Lame parameter.
    :param density: The density.
    :returns: The P-wave velocity.
    :rtype: float
@@ -20,9 +20,9 @@ def Vs(mu, density):
 
     .. math:: \sqrt{\frac{\mu}{\rho}}
 
-   where :math:`\rho` is the density, and :math:`\lambda` and :math:`\mu` is the second Lamé parameter.
+   where :math:`\rho` is the density, and :math:`\lambda` and :math:`\mu` is the second Lame parameter.
 
-   :param mu: The second Lamé parameter.
+   :param mu: The second Lame parameter.
    :param density: The density.
    :returns: The P-wave velocity.
    :rtype: float
