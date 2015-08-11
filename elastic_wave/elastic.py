@@ -220,7 +220,11 @@ class ElasticLF4(object):
       return g
 
    def solve(self, rhs, matrix, result):
-      """ Solve by assembling RHS and applying inverse mass matrix. """
+      r""" Solve by assembling RHS and applying inverse mass matrix.
+      :param rhs: The RHS vector that the inverse mass matrix will be multiplied with.
+      :param matrix: The inverse mass matrix.
+      :param firedrake.Function result: The solution field.
+      :returns: None"""
       F_a = assemble(rhs)
       with result.vector().dat.vec as res:
          with F_a.vector().dat.vec as F_v:
@@ -236,7 +240,11 @@ class ElasticLF4(object):
       return LinearVariationalSolver(problem)
 
    def write(self, u=None, s=None):
-      """ Write the velocity and/or stress fields to file. """
+      r""" Write the velocity and/or stress fields to file.
+      :param firedrake.Function u: The velocity field.
+      :param firedrake.Function s: The stress field.
+      :returns: None
+      """
       if self.output:
          with timed_region('i/o'):
             if(u):
