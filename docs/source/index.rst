@@ -11,7 +11,8 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
-
+   introduction
+   elastic_wave_equations
 
 Indices and tables
 ==================
