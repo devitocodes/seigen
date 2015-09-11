@@ -46,6 +46,22 @@ class EigenmodeBench(Benchmark):
         for task, timer in get_timers(reset=True).items():
             self.register_timing(task, timer.total)
 
+        if explicit:
+            petsc_events = {'Stress Solve' : ['MatMult', 'RHS Assembly'],
+                            'Velocity Solve' : ['MatMult', 'RHS Assembly']}
+        else:
+            petsc_events = {'Stress Solve' : ['KSPSolve'],
+                            'Velocity Solve' : ['KSPSolve']}
+
+        for stage, events in petsc_events.items():
+            for event in events:
+                petsc_log = eigen.elastic.petsc_log
+                info = petsc_log.Event(event).getPerfInfo(petsc_log.Stage(stage))
+                flops = op2.MPI.comm.allreduce(info['flops'], op=mpi4py.MPI.SUM)
+                time = op2.MPI.comm.allreduce(info['time'], op=mpi4py.MPI.MAX)
+                mflops_s = flops / time / 1.e6 if time > 0. else 0.
+                self.register_timing("%s::%s::Estimated Mflop/s" % (stage, event), mflops_s)
+
         self.meta['dofs'] = op2.MPI.comm.allreduce(eigen.elastic.S.dof_count, op=mpi4py.MPI.SUM)
         try:
             u_error, s_error = eigen.eigenmode_error(u1, s1)

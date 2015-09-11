@@ -5,6 +5,7 @@ from pyop2.profiling import timed_region, summary
 from pyop2.utils import cached_property
 op2.init(lazy_evaluation=False)
 from firedrake import *
+from firedrake.petsc import PETSc
 import mpi4py
 mport numpy
 
@@ -72,6 +73,12 @@ class ElasticLF4(object):
    def log(self, s):
       if op2.MPI.comm.rank == 0:
          print s
+
+   @cached_property
+   def petsc_log(self):
+      log = PETSc.Log()
+      log.begin()
+      return log
       
    @property
    def absorption(self):
@@ -230,7 +237,8 @@ class ElasticLF4(object):
       :param matrix: The inverse mass matrix.
       :param firedrake.Function result: The solution field.
       :returns: None"""
-      F_a = assemble(rhs)
+      with self.petsc_log.Event("RHS Assembly"):
+         F_a = assemble(rhs)
       with result.dat.vec as res:
          with F_a.dat.vec_ro as F_v:
             matrix.handle.mult(F_v, res)
@@ -295,34 +303,34 @@ class ElasticLF4(object):
                   self.source = self.source_expression
             
             # Solve for the velocity vector field.
-            if self.explicit:
+            with self.petsc_log.Stage("Velocity Solve"):
                with timed_region('velocity solve'):
-                  self.solve(self.rhs_uh1, self.imass_velocity, self.uh1)
-                  self.solve(self.rhs_stemp, self.imass_stress, self.stemp)
-                  self.solve(self.rhs_uh2, self.imass_velocity, self.uh2)
-                  self.solve(self.rhs_u1, self.imass_velocity, self.u1)
-            else:
-               with timed_region('velocity solve'):
-                  solver_uh1.solve()
-                  solver_stemp.solve()
-                  solver_uh2.solve()
-                  solver_u1.solve()
-            self.u0.assign(self.u1)
+                  if self.explicit:
+                     self.solve(self.rhs_uh1, self.imass_velocity, self.uh1)
+                     self.solve(self.rhs_stemp, self.imass_stress, self.stemp)
+                     self.solve(self.rhs_uh2, self.imass_velocity, self.uh2)
+                     self.solve(self.rhs_u1, self.imass_velocity, self.u1)
+                  else:
+                     solver_uh1.solve()
+                     solver_stemp.solve()
+                     solver_uh2.solve()
+                     solver_u1.solve()
+                  self.u0.assign(self.u1)
             
             # Solve for the stress tensor field.
-            if self.explicit:
+            with self.petsc_log.Stage("Stress Solve"):
                with timed_region('stress solve'):
-                  self.solve(self.rhs_sh1, self.imass_stress, self.sh1)
-                  self.solve(self.rhs_utemp, self.imass_velocity, self.utemp)
-                  self.solve(self.rhs_sh2, self.imass_stress, self.sh2)
-                  self.solve(self.rhs_s1, self.imass_stress, self.s1)
-            else:
-               with timed_region('stress solve'):
-                  solver_sh1.solve()
-                  solver_utemp.solve()
-                  solver_sh2.solve()
-                  solver_s1.solve()
-            self.s0.assign(self.s1)
+                  if self.explicit:
+                     self.solve(self.rhs_sh1, self.imass_stress, self.sh1)
+                     self.solve(self.rhs_utemp, self.imass_velocity, self.utemp)
+                     self.solve(self.rhs_sh2, self.imass_stress, self.sh2)
+                     self.solve(self.rhs_s1, self.imass_stress, self.s1)
+                  else:
+                     solver_sh1.solve()
+                     solver_utemp.solve()
+                     solver_sh2.solve()
+                     solver_s1.solve()
+                  self.s0.assign(self.s1)
             
             # Write out the new fields
             self.write(self.u1, self.s1)
