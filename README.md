@@ -7,4 +7,4 @@ Seigen (seismology through code generation) is an elastic wave equation solver f
 ## Dependencies
 
 * [Firedrake](http://www.firedrakeproject.org)
-* [pybench](https://github.com/firedrakeproject/pybench)
+* [pybench](https://github.com/firedrakeproject/pybench) - only required if you want to perform benchmarking.
