@@ -4,6 +4,10 @@ from pybench import Benchmark, parser
 from pyop2.profiling import get_timers
 from firedrake import *
 import mpi4py
+try:
+    import pypapi
+except:
+    pypapi = None
 
 parameters["pyop2_options"]["profiling"] = True
 parameters["pyop2_options"]["lazy_evaluation"] = False
@@ -36,12 +40,24 @@ class EigenmodeBench(Benchmark):
         parameters["coffee"]["O3"] = opt >= 3
         parameters["coffee"]["O4"] = opt >= 4
 
+        try:
+            wtime, ptime, flpins, mflops = pypapi.flops()
+        except:
+            wtime, ptime, flpins, mflops = (0., 0., 0, 0)
         if dim == 2:
             eigen = Eigenmode2DLF4(N, degree, dt, explicit=explicit, output=False)
             u1, s1 = eigen.eigenmode2d(T=T)
         elif dim == 3:
             eigen = Eigenmode3DLF4(N, degree, dt, explicit=explicit, output=False)
             u1, s1 = eigen.eigenmode3d(T=T)
+
+        try:
+            wtime, ptime, flpins, mflops = pypapi.flops()
+        except:
+            wtime, ptime, flpins, mflops = (0., 0., 0, 0)
+        self.register_timing('PAPI::wtime', wtime)
+        self.register_timing('PAPI::ptime', ptime)
+        self.register_timing('PAPI::mflops', mflops)
 
         for task, timer in get_timers(reset=True).items():
             self.register_timing(task, timer.total)
