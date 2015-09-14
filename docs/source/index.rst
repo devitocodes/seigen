@@ -12,7 +12,7 @@ Contents:
    :maxdepth: 2
 
    introduction
-   elastic_wave_equations
+   equations
 
 Indices and tables
 ==================
