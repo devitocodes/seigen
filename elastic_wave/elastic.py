@@ -226,8 +226,8 @@ class ElasticLF4(object):
       :param firedrake.Function result: The solution field.
       :returns: None"""
       F_a = assemble(rhs)
-      with result.vector().dat.vec as res:
-         with F_a.vector().dat.vec as F_v:
+      with result.dat.vec as res:
+         with F_a.dat.vec_ro as F_v:
             matrix.handle.mult(F_v, res)
 
    def create_solver(self, form, result):
