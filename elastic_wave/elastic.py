@@ -96,6 +96,33 @@ class ElasticLF4(object):
       """
       self.source_function.interpolate(expression) 
 
+   def assemble_inverse_mass_asdat(self):
+      #velocity_mass = inner(self.w, self.u)*dx
+      #stress_mass = inner(self.v, self.s)*dx
+      # Here, we get to break the abstraction
+      #from firedrake.ffc_interface import compile_form
+      #kernel = compile_form(velocity_mass, "form", parameters={'assemble_inverse': True})[0][-1]
+      #code = kernel.code()
+      #block_diagonal_matrix = ... 
+      #coordinates = self.mesh.coordinates
+      #
+      # Inverse of the (consistent) mass matrix for the velocity equation.
+      # Inverse of the (consistent) mass matrix for the stress equation.
+
+      # "Datting" the velocity mass matrix
+      arity = sum(self.U._dofs_per_entity)*self.U.cdim
+      self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
+      for i in range(self.mesh.num_cells()):
+          val = self.imass_velocity.values[i*arity:(i+1)*arity, i*arity:(i+1)*arity].flatten()
+          self.velocity_mass_asdat.data[i] = val
+
+      # "Datting" the stress mass matrix
+      arity = sum(self.S._dofs_per_entity)*self.S.cdim
+      self.stress_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
+      for i in range(self.mesh.num_cells()):
+          val = self.imass_stress.values[i*arity:(i+1)*arity, i*arity:(i+1)*arity].flatten()
+          self.stress_mass_asdat.data[i] = val
+
    def assemble_inverse_mass(self):
       r""" Compute the inverse of the consistent mass matrix for the velocity and stress equations.
       :returns: None
@@ -266,6 +293,7 @@ class ElasticLF4(object):
          # constant throughout the simulation (assuming no mesh adaptivity).
          with timed_region('inverse mass matrix'):
             self.assemble_inverse_mass()
+            self.assemble_inverse_mass_asdat()
       else:
          print "Creating solver contexts"
          with timed_region('solver setup'):
