@@ -5,6 +5,7 @@ from pyop2.profiling import timed_region, summary
 from pyop2.utils import cached_property
 op2.init(lazy_evaluation=False)
 from firedrake import *
+from firedrake.petsc import PETSc
 import mpi4py
 import numpy
 
@@ -65,8 +66,8 @@ class ElasticLF4(object):
       if self.output:
          with timed_region('i/o'):
             # File output streams
-            self.u_stream = File("velocity.pvd")
-            self.s_stream = File("stress.pvd")
+            self.u_stream = File("/tmp/output/velocity.pvd")
+            self.s_stream = File("/tmp/output/stress.pvd")
       
    @property
    def absorption(self):
@@ -96,20 +97,22 @@ class ElasticLF4(object):
       """
       self.source_function.interpolate(expression) 
 
-   def assemble_inverse_mass_asdat(self):
+   def assemble_inverse_mass_dat(self):
       # "Datting" the velocity mass matrix
       arity = sum(self.U._dofs_per_entity)*self.U.cdim
       self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
       for i in range(self.mesh.num_cells()):
-          val = self.imass_velocity.values[i*arity:(i+1)*arity, i*arity:(i+1)*arity].flatten()
-          self.velocity_mass_asdat.data[i] = val
+          indices = PETSc.IS().createGeneral(i*arity + numpy.arange(arity, dtype=numpy.int32))
+          val = self.imass_velocity.handle.getSubMatrix(indices, indices)
+          self.velocity_mass_asdat.data[i] = val[:, :].flatten()
 
       # "Datting" the stress mass matrix
       arity = sum(self.S._dofs_per_entity)*self.S.cdim
       self.stress_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
       for i in range(self.mesh.num_cells()):
-          val = self.imass_stress.values[i*arity:(i+1)*arity, i*arity:(i+1)*arity].flatten()
-          self.stress_mass_asdat.data[i] = val
+          indices = PETSc.IS().createGeneral(i*arity + numpy.arange(arity, dtype=numpy.int32))
+          val = self.imass_stress.handle.getSubMatrix(indices, indices)
+          self.stress_mass_asdat.data[i] = val[:, :].flatten()
 
    def assemble_inverse_mass(self):
       r""" Compute the inverse of the consistent mass matrix for the velocity and stress equations.
@@ -245,6 +248,36 @@ class ElasticLF4(object):
          with F_a.vector().dat.vec as F_v:
             matrix.handle.mult(F_v, res)
 
+   def solve_dat(self, rhs, matrix_asdat, result):
+      F_a = assemble(rhs)
+
+      # Get the number of dofs on each element
+      F_a_fs = F_a.function_space()
+      ndofs = sum(F_a_fs._dofs_per_entity)
+      cdim = F_a_fs.cdim
+
+      matvec_mul = """
+void mat_vec_mul_kernel(double* A, double** B, double** C) {
+  const int N = %(ndofs)s * %(cdim)s;
+  for (int i = 0; i < N; i++) {
+    C[i/%(cdim)s][i%%%(cdim)s] = 0.0;
+    //printf("Product C[%%d][%%d]: ", i/%(cdim)s, i%%%(cdim)s);
+    for(int j = 0; j < %(ndofs)s; j++) {
+      //printf("(%%G, %%G), ", A[i*N + j*%(cdim)s], B[j][0]);
+      //printf("(%%G, %%G), ", A[i*N + j*%(cdim)s + 1], B[j][1]);
+      C[i/%(cdim)s][i%%%(cdim)s] += (A[i*N + j*%(cdim)s] * B[j][0]) + (A[i*N + j*%(cdim)s + 1] * B[j][1]);
+    }
+    //printf("; TOT = %%G  \\n", C[i/%(cdim)s][i%%%(cdim)s]);
+  }
+}
+"""
+
+      kernel = op2.Kernel(matvec_mul % {'ndofs': ndofs, 'cdim': cdim}, "mat_vec_mul_kernel")
+      op2.par_loop(kernel, self.mesh.cell_set,
+                   matrix_asdat(op2.READ),
+                   F_a.dat(op2.READ, F_a.cell_node_map()),
+                   result.dat(op2.WRITE, result.cell_node_map()))
+
    def create_solver(self, form, result):
       r""" Create a solver object for a given form.
       :param ufl.Form form: The weak form of the equation that needs solving.
@@ -281,7 +314,7 @@ class ElasticLF4(object):
          # constant throughout the simulation (assuming no mesh adaptivity).
          with timed_region('inverse mass matrix'):
             self.assemble_inverse_mass()
-            self.assemble_inverse_mass_asdat()
+            self.assemble_inverse_mass_dat()
       else:
          print "Creating solver contexts"
          with timed_region('solver setup'):
@@ -309,6 +342,7 @@ class ElasticLF4(object):
             if self.explicit:
                with timed_region('velocity solve'):
                   self.solve(self.rhs_uh1, self.imass_velocity, self.uh1)
+                  #self.solve_dat(self.rhs_uh1, self.velocity_mass_asdat, self.uh1)
                   self.solve(self.rhs_stemp, self.imass_stress, self.stemp)
                   self.solve(self.rhs_uh2, self.imass_velocity, self.uh2)
                   self.solve(self.rhs_u1, self.imass_velocity, self.u1)
