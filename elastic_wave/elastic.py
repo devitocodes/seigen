@@ -97,18 +97,6 @@ class ElasticLF4(object):
       self.source_function.interpolate(expression) 
 
    def assemble_inverse_mass_asdat(self):
-      #velocity_mass = inner(self.w, self.u)*dx
-      #stress_mass = inner(self.v, self.s)*dx
-      # Here, we get to break the abstraction
-      #from firedrake.ffc_interface import compile_form
-      #kernel = compile_form(velocity_mass, "form", parameters={'assemble_inverse': True})[0][-1]
-      #code = kernel.code()
-      #block_diagonal_matrix = ... 
-      #coordinates = self.mesh.coordinates
-      #
-      # Inverse of the (consistent) mass matrix for the velocity equation.
-      # Inverse of the (consistent) mass matrix for the stress equation.
-
       # "Datting" the velocity mass matrix
       arity = sum(self.U._dofs_per_entity)*self.U.cdim
       self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
