@@ -66,8 +66,8 @@ class ElasticLF4(object):
       if self.output:
          with timed_region('i/o'):
             # File output streams
-            self.u_stream = File("/tmp/output/velocity.pvd")
-            self.s_stream = File("/tmp/output/stress.pvd")
+            self.u_stream = File("/data/output/velocity.pvd")
+            self.s_stream = File("/data/output/stress.pvd")
       
    @property
    def absorption(self):
@@ -97,7 +97,7 @@ class ElasticLF4(object):
       """
       self.source_function.interpolate(expression) 
 
-   def assemble_inverse_mass_dat(self):
+   def copy_massmatrix_into_dat(self):
       # "Datting" the velocity mass matrix
       arity = sum(self.U._dofs_per_entity)*self.U.cdim
       self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
@@ -251,7 +251,8 @@ class ElasticLF4(object):
    def solve_dat(self, rhs, matrix_asdat, result):
       F_a = assemble(rhs)
 
-      # Get the number of dofs on each element
+      # The number of dofs on each element is /ndofs*cdim/. If using vector-valued function spaces,
+      # the total number of values is /ndofs*cdim/
       F_a_fs = F_a.function_space()
       ndofs = sum(F_a_fs._dofs_per_entity)
       cdim = F_a_fs.cdim
@@ -263,11 +264,12 @@ void mat_vec_mul_kernel(double* A, double** B, double** C) {
     C[i/%(cdim)s][i%%%(cdim)s] = 0.0;
     //printf("Product C[%%d][%%d]: ", i/%(cdim)s, i%%%(cdim)s);
     for(int j = 0; j < %(ndofs)s; j++) {
-      //printf("(%%G, %%G), ", A[i*N + j*%(cdim)s], B[j][0]);
-      //printf("(%%G, %%G), ", A[i*N + j*%(cdim)s + 1], B[j][1]);
-      C[i/%(cdim)s][i%%%(cdim)s] += (A[i*N + j*%(cdim)s] * B[j][0]) + (A[i*N + j*%(cdim)s + 1] * B[j][1]);
+      for(int k = 0; k < %(cdim)s; k++) {
+        //printf("(%%G, %%G), ", A[i*N + j*%(cdim)s + k], B[j][k]);
+        C[i/%(cdim)s][i%%%(cdim)s] += A[i*N + j*%(cdim)s + k] * B[j][k];
+      }
     }
-    //printf("; TOT = %%G  \\n", C[i/%(cdim)s][i%%%(cdim)s]);
+    //printf("; TOT = %%G\\n", C[i/%(cdim)s][i%%%(cdim)s]);
   }
 }
 """
@@ -314,7 +316,7 @@ void mat_vec_mul_kernel(double* A, double** B, double** C) {
          # constant throughout the simulation (assuming no mesh adaptivity).
          with timed_region('inverse mass matrix'):
             self.assemble_inverse_mass()
-            self.assemble_inverse_mass_dat()
+            self.copy_massmatrix_into_dat()
       else:
          print "Creating solver contexts"
          with timed_region('solver setup'):
@@ -341,11 +343,14 @@ void mat_vec_mul_kernel(double* A, double** B, double** C) {
             # Solve for the velocity vector field.
             if self.explicit:
                with timed_region('velocity solve'):
-                  self.solve(self.rhs_uh1, self.imass_velocity, self.uh1)
-                  #self.solve_dat(self.rhs_uh1, self.velocity_mass_asdat, self.uh1)
-                  self.solve(self.rhs_stemp, self.imass_stress, self.stemp)
-                  self.solve(self.rhs_uh2, self.imass_velocity, self.uh2)
-                  self.solve(self.rhs_u1, self.imass_velocity, self.u1)
+                  #self.solve(self.rhs_uh1, self.imass_velocity, self.uh1, a=True)
+                  #self.solve(self.rhs_stemp, self.imass_stress, self.stemp)
+                  #self.solve(self.rhs_uh2, self.imass_velocity, self.uh2)
+                  #self.solve(self.rhs_u1, self.imass_velocity, self.u1)
+                  self.solve_dat(self.rhs_uh1, self.velocity_mass_asdat, self.uh1)
+                  self.solve_dat(self.rhs_stemp, self.stress_mass_asdat, self.stemp)
+                  self.solve_dat(self.rhs_uh2, self.velocity_mass_asdat, self.uh2)
+                  self.solve_dat(self.rhs_u1, self.velocity_mass_asdat, self.u1)
             else:
                with timed_region('velocity solve'):
                   solver_uh1.solve()
@@ -357,10 +362,14 @@ void mat_vec_mul_kernel(double* A, double** B, double** C) {
             # Solve for the stress tensor field.
             if self.explicit:
                with timed_region('stress solve'):
-                  self.solve(self.rhs_sh1, self.imass_stress, self.sh1)
-                  self.solve(self.rhs_utemp, self.imass_velocity, self.utemp)
-                  self.solve(self.rhs_sh2, self.imass_stress, self.sh2)
-                  self.solve(self.rhs_s1, self.imass_stress, self.s1)
+                  #self.solve(self.rhs_sh1, self.imass_stress, self.sh1)
+                  #self.solve(self.rhs_utemp, self.imass_velocity, self.utemp)
+                  #self.solve(self.rhs_sh2, self.imass_stress, self.sh2)
+                  #self.solve(self.rhs_s1, self.imass_stress, self.s1)
+                  self.solve_dat(self.rhs_sh1, self.stress_mass_asdat, self.sh1)
+                  self.solve_dat(self.rhs_utemp, self.velocity_mass_asdat, self.utemp)
+                  self.solve_dat(self.rhs_sh2, self.stress_mass_asdat, self.sh2)
+                  self.solve_dat(self.rhs_s1, self.stress_mass_asdat, self.s1)
             else:
                with timed_region('stress solve'):
                   solver_sh1.solve()
