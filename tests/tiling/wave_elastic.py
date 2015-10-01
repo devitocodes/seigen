@@ -4,11 +4,17 @@ from firedrake.petsc import PETSc
 from pyop2.utils import cached_property
 from pyop2.profiling import timed_region
 from pyop2.base import _trace, Dat, DataSet
+from pyop2.configuration import configuration
+from pyop2.fusion import loop_chain
+
+import coffee.base as ast
 
 from math import *
 import mpi4py
 import numpy as np
+from time import time
 
+from utils.benchmarking import parser, output_time
 
 # This is an explicit DG method: we invert the mass matrix and perform a matrix-vector multiplication to get the solution
 
@@ -16,7 +22,7 @@ class ElasticLF4(object):
     r""" An elastic wave equation solver, using the finite element method for spatial discretisation,
     and a fourth-order leap-frog time-stepping scheme. """
 
-    def __init__(self, mesh, family, degree, dimension, output=True):
+    def __init__(self, mesh, family, degree, dimension, output=True, tiling=None):
         r""" Initialise a new elastic wave simulation.
 
         :param mesh: The underlying computational mesh of vertices and edges.
@@ -24,6 +30,7 @@ class ElasticLF4(object):
         :param int degree: Use polynomial basis functions of this degree.
         :param int dimension: The spatial dimension of the problem (1, 2 or 3).
         :param bool output: If True, output the solution fields to a file.
+        :param dict tiling: Parameters driving tiling (tile size, unroll factor, mode, ...)
         :returns: None
         """
         with timed_region('function setup'):
@@ -63,6 +70,11 @@ class ElasticLF4(object):
 
             self.n = FacetNormal(self.mesh)
             self.I = Identity(self.dimension)
+
+            # Tiling options
+            self.tiling_size = tiling['tile_size']
+            self.tiling_uf = tiling['num_unroll']
+            self.tiling_mode = tiling['mode']
 
         if self.output:
             with timed_region('i/o'):
@@ -243,24 +255,20 @@ class ElasticLF4(object):
         ndofs = sum(F_a_fs._dofs_per_entity)
         cdim = F_a_fs.cdim
 
-        matvec_mul = """
-vvoidd mat_vec_mul_kernel(double* A, double** B, double** C) {
-   coonst int N = %(ndofs)s * %(cdim)s;
-   foor (int i = 0; i < N; i++) {
-      C[i/%(cdim)s][i%%%(cdim)s] = 0.0;
-      //printf("Product C[%%d][%%d]: ", i/%(cdim)s, i%%%(cdim)s);
-      for(int j = 0; j < %(ndofs)s; j++) {
-        for(int k = 0; k < %(cdim)s; k++) {
-          //printf("(%%G, %%G), ", A[i*N + j*%(cdim)s + k], B[j][k]);
-          C[i/%(cdim)s][i%%%(cdim)s] += A[i*N + j*%(cdim)s + k] * B[j][k];
-        }
-      }
-      //printf("; TOT = %%G\\n", C[i/%(cdim)s][i%%%(cdim)s]);
-   }
-}}
-"""
+        # The AST of the mat-vel mul
+        body = ast.Incr(ast.Symbol('C', ('i/%d' % cdim, 'i%%%d' % cdim)),
+                        ast.Prod(ast.Symbol('A', ('i',), (('N', 'j*%d + k' % cdim),)),
+                                 ast.Symbol('B', ('j', 'k'))))
+        body = ast.c_for('k', cdim, body).children[0]
+        body = [ast.Assign(ast.Symbol('C', ('i/%d' % cdim, 'i%%%d' % cdim)), '0.0'),
+                ast.c_for('j', ndofs, body).children[0]]
+        body = ast.Root([ast.Decl('int', 'N', ast.Prod(ndofs, cdim), ['const']),
+                         ast.c_for('i', 'N', body).children[0]])
+        funargs = [ast.Decl('double*', 'A'), ast.Decl('double**', 'B'), ast.Decl('double**', 'C')]
+        fundecl = ast.FunDecl('void', 'mat_vec_mul_kernel', funargs, body, ['static', 'inline'])
 
-        kernel = op2.Kernel(matvec_mul % {'ndofs': ndofs, 'cdim': cdim}, "mat_vec_mul_kernel")
+        # Create the par loop (automatically added to the trace of loops to be executed)
+        kernel = op2.Kernel(fundecl, "mat_vec_mul_kernel")
         op2.par_loop(kernel, self.mesh.cell_set,
                      matrix_asdat(op2.READ),
                      F_a.dat(op2.READ, F_a.cell_node_map()),
@@ -273,6 +281,7 @@ vvoidd mat_vec_mul_kernel(double* A, double** B, double** C) {
         :returns: None
         """
         if self.output:
+            _trace.evaluate_all()
             with timed_region('i/o'):
                 if(u):
                     self.u_stream << u
@@ -297,27 +306,28 @@ vvoidd mat_vec_mul_kernel(double* A, double** B, double** C) {
         with timed_region('timestepping'):
             t = self.dt
             while t <= T + 1e-12:
-                print "t = %f" % t
+                with loop_chain("main", tile_size=self.tiling_size, num_unroll=self.tiling_uf, mode=self.tiling_mode):
+                    print "t = %f" % t
 
-                # In case the source is time-dependent, update the time 't' here.
-                if(self.source):
-                    with timed_region('source term update'):
-                        self.source_expression.t = t
-                        self.source = self.source_expression
+                    # In case the source is time-dependent, update the time 't' here.
+                    if(self.source):
+                        with timed_region('source term update'):
+                            self.source_expression.t = t
+                            self.source = self.source_expression
 
-                # Solve for the velocity vector field.
-                self.solve(self.rhs_uh1, self.velocity_mass_asdat, self.uh1)
-                self.solve(self.rhs_stemp, self.stress_mass_asdat, self.stemp)
-                self.solve(self.rhs_uh2, self.velocity_mass_asdat, self.uh2)
-                self.solve(self.rhs_u1, self.velocity_mass_asdat, self.u1)
-                self.u0.assign(self.u1)
+                    # Solve for the velocity vector field.
+                    self.solve(self.rhs_uh1, self.velocity_mass_asdat, self.uh1)
+                    self.solve(self.rhs_stemp, self.stress_mass_asdat, self.stemp)
+                    self.solve(self.rhs_uh2, self.velocity_mass_asdat, self.uh2)
+                    self.solve(self.rhs_u1, self.velocity_mass_asdat, self.u1)
+                    self.u0.assign(self.u1)
 
-                # Solve for the stress tensor field.
-                self.solve(self.rhs_sh1, self.stress_mass_asdat, self.sh1)
-                self.solve(self.rhs_utemp, self.velocity_mass_asdat, self.utemp)
-                self.solve(self.rhs_sh2, self.stress_mass_asdat, self.sh2)
-                self.solve(self.rhs_s1, self.stress_mass_asdat, self.s1)
-                self.s0.assign(self.s1)
+                    # Solve for the stress tensor field.
+                    self.solve(self.rhs_sh1, self.stress_mass_asdat, self.sh1)
+                    self.solve(self.rhs_utemp, self.velocity_mass_asdat, self.utemp)
+                    self.solve(self.rhs_sh2, self.stress_mass_asdat, self.sh2)
+                    self.solve(self.rhs_s1, self.stress_mass_asdat, self.s1)
+                    self.s0.assign(self.s1)
 
                 # Write out the new fields
                 self.write(self.u1, self.s1)
@@ -366,13 +376,20 @@ def Vs(mu, density):
 class ExplosiveSourceLF4():
 
     def generate_mesh(self, Lx=300.0, Ly=150.0, h=2.5):
-        return RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
+        mesh = RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
+        mesh.init(s_depth=1)
+        # This is only to print out info related to tiling
+        slope(mesh, debug=True)
+        return mesh
 
-    def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, output=True):
+    def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, output=True, tiling=None):
 
         with timed_region('mesh generation'):
             mesh = self.generate_mesh()
-            self.elastic = ElasticLF4(mesh, "DG", 2, dimension=2, output=output)
+            self.elastic = ElasticLF4(mesh, "DG", 2, dimension=2, output=output, tiling=tiling)
+
+        # Tiling info
+        tile_size = tiling['tile_size']
 
         # Constants
         self.elastic.density = 1.0
@@ -401,9 +418,13 @@ class ExplosiveSourceLF4():
         sic = Expression((('0', '0'), ('0', '0')))
         self.elastic.s0.assign(Function(self.elastic.S).interpolate(sic))
 
-        # Start the simulation
-        with timed_region('elastic-run'):
-            self.elastic.run(T)
+        # Run the simulation
+        start = time()
+        self.elastic.run(T)
+        end = time()
+
+        # Print runtime summary
+        output_time(start, end, tofile=True, fs=ElasticLF4.U, tile_size=tile_size)
 
 
 if __name__ == '__main__':
@@ -411,4 +432,17 @@ if __name__ == '__main__':
     from ffc.log import set_level
     set_level('ERROR')
 
-    ExplosiveSourceLF4().explosive_source_lf4(T=2.5)
+    # Remove trace bound to avoid running inspections over and over
+    configuration['lazy_max_trace_length'] = 0
+    # Switch on PyOP2 profiling
+    configuration['profiling'] = True
+
+    # Parse the input
+    args = parser()
+    tiling = {
+        'num_unroll': args.num_unroll,
+        'tile_size': args.tile_size,
+        'mode': args.fusion_mode
+    }
+
+    ExplosiveSourceLF4().explosive_source_lf4(T=2.5, tiling=tiling)
