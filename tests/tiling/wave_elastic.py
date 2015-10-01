@@ -38,8 +38,8 @@ class ElasticLF4(object):
             self.dimension = dimension
             self.output = output
 
-            self.S = TensorFunctionSpace(mesh, family, degree)
-            self.U = VectorFunctionSpace(mesh, family, degree)
+            self.S = TensorFunctionSpace(mesh, family, degree, name='S')
+            self.U = VectorFunctionSpace(mesh, family, degree, name='U')
             # Assumes that the S and U function spaces are the same.
             print "Number of degrees of freedom: %d" % op2.MPI.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
 
@@ -265,10 +265,11 @@ class ElasticLF4(object):
         body = ast.Root([ast.Decl('int', 'N', ast.Prod(ndofs, cdim), ['const']),
                          ast.c_for('i', 'N', body).children[0]])
         funargs = [ast.Decl('double*', 'A'), ast.Decl('double**', 'B'), ast.Decl('double**', 'C')]
-        fundecl = ast.FunDecl('void', 'mat_vec_mul_kernel', funargs, body, ['static', 'inline'])
+        name = 'mat_vec_mul_kernel_%s' % F_a.function_space().name
+        fundecl = ast.FunDecl('void', name, funargs, body, ['static', 'inline'])
 
         # Create the par loop (automatically added to the trace of loops to be executed)
-        kernel = op2.Kernel(fundecl, "mat_vec_mul_kernel")
+        kernel = op2.Kernel(fundecl, name)
         op2.par_loop(kernel, self.mesh.cell_set,
                      matrix_asdat(op2.READ),
                      F_a.dat(op2.READ, F_a.cell_node_map()),
@@ -306,7 +307,7 @@ class ElasticLF4(object):
         with timed_region('timestepping'):
             t = self.dt
             while t <= T + 1e-12:
-                with loop_chain("main", tile_size=self.tiling_size, num_unroll=self.tiling_uf, mode=self.tiling_mode):
+                with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf, mode=self.tiling_mode):
                     print "t = %f" % t
 
                     # In case the source is time-dependent, update the time 't' here.
@@ -318,16 +319,16 @@ class ElasticLF4(object):
                     # Solve for the velocity vector field.
                     self.solve(self.rhs_uh1, self.velocity_mass_asdat, self.uh1)
                     self.solve(self.rhs_stemp, self.stress_mass_asdat, self.stemp)
-                    self.solve(self.rhs_uh2, self.velocity_mass_asdat, self.uh2)
-                    self.solve(self.rhs_u1, self.velocity_mass_asdat, self.u1)
-                    self.u0.assign(self.u1)
+                self.solve(self.rhs_uh2, self.velocity_mass_asdat, self.uh2)
+                self.solve(self.rhs_u1, self.velocity_mass_asdat, self.u1)
+                self.u0.assign(self.u1)
 
-                    # Solve for the stress tensor field.
-                    self.solve(self.rhs_sh1, self.stress_mass_asdat, self.sh1)
-                    self.solve(self.rhs_utemp, self.velocity_mass_asdat, self.utemp)
-                    self.solve(self.rhs_sh2, self.stress_mass_asdat, self.sh2)
-                    self.solve(self.rhs_s1, self.stress_mass_asdat, self.s1)
-                    self.s0.assign(self.s1)
+                # Solve for the stress tensor field.
+                self.solve(self.rhs_sh1, self.stress_mass_asdat, self.sh1)
+                self.solve(self.rhs_utemp, self.velocity_mass_asdat, self.utemp)
+                self.solve(self.rhs_sh2, self.stress_mass_asdat, self.sh2)
+                self.solve(self.rhs_s1, self.stress_mass_asdat, self.s1)
+                self.s0.assign(self.s1)
 
                 # Write out the new fields
                 self.write(self.u1, self.s1)
@@ -408,7 +409,7 @@ class ExplosiveSourceLF4():
         self.elastic.source = self.elastic.source_expression
 
         # Absorption
-        F = FunctionSpace(mesh, "DG", 4)
+        F = FunctionSpace(mesh, "DG", 4, name='F')
         self.elastic.absorption_function = Function(F)
         self.elastic.absorption = Expression("x[0] <= 20 || x[0] >= 280 || x[1] <= 20.0 ? 1000 : 0")
 
