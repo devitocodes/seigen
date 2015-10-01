@@ -1,11 +1,13 @@
 from firedrake import *
+from firedrake.petsc import PETSc
 
 from pyop2.utils import cached_property
 from pyop2.profiling import timed_region
-from pyop2.base import _trace
+from pyop2.base import _trace, Dat, DataSet
 
 from math import *
 import mpi4py
+import numpy as np
 
 
 # This is an explicit DG method: we invert the mass matrix and perform a matrix-vector multiplication to get the solution
@@ -116,7 +118,7 @@ class ElasticLF4(object):
         arity = sum(self.U._dofs_per_entity)*self.U.cdim
         self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
         for i in range(self.mesh.num_cells()):
-            indices = PETSc.IS().createGeneral(i*arity + numpy.arange(arity, dtype=numpy.int32))
+            indices = PETSc.IS().createGeneral(i*arity + np.arange(arity, dtype=np.int32))
             val = self.imass_velocity.handle.getSubMatrix(indices, indices)
             self.velocity_mass_asdat.data[i] = val[:, :].flatten()
 
@@ -124,7 +126,7 @@ class ElasticLF4(object):
         arity = sum(self.S._dofs_per_entity)*self.S.cdim
         self.stress_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
         for i in range(self.mesh.num_cells()):
-            indices = PETSc.IS().createGeneral(i*arity + numpy.arange(arity, dtype=numpy.int32))
+            indices = PETSc.IS().createGeneral(i*arity + np.arange(arity, dtype=np.int32))
             val = self.imass_stress.handle.getSubMatrix(indices, indices)
             self.stress_mass_asdat.data[i] = val[:, :].flatten()
 
@@ -366,7 +368,7 @@ class ExplosiveSourceLF4():
     def generate_mesh(self, Lx=300.0, Ly=150.0, h=2.5):
         return RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
 
-    def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, output=False):
+    def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, output=True):
 
         with timed_region('mesh generation'):
             mesh = self.generate_mesh()
