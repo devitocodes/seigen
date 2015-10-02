@@ -307,9 +307,8 @@ class ElasticLF4(object):
         with timed_region('timestepping'):
             t = self.dt
             while t <= T + 1e-12:
+                print "t = %f" % t
                 with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf, mode=self.tiling_mode):
-                    print "t = %f" % t
-
                     # In case the source is time-dependent, update the time 't' here.
                     if(self.source):
                         with timed_region('source term update'):
@@ -319,16 +318,16 @@ class ElasticLF4(object):
                     # Solve for the velocity vector field.
                     self.solve(self.rhs_uh1, self.velocity_mass_asdat, self.uh1)
                     self.solve(self.rhs_stemp, self.stress_mass_asdat, self.stemp)
-                self.solve(self.rhs_uh2, self.velocity_mass_asdat, self.uh2)
-                self.solve(self.rhs_u1, self.velocity_mass_asdat, self.u1)
-                self.u0.assign(self.u1)
+                    self.solve(self.rhs_uh2, self.velocity_mass_asdat, self.uh2)
+                    self.solve(self.rhs_u1, self.velocity_mass_asdat, self.u1)
+                    self.u0.assign(self.u1)
 
-                # Solve for the stress tensor field.
-                self.solve(self.rhs_sh1, self.stress_mass_asdat, self.sh1)
-                self.solve(self.rhs_utemp, self.velocity_mass_asdat, self.utemp)
-                self.solve(self.rhs_sh2, self.stress_mass_asdat, self.sh2)
-                self.solve(self.rhs_s1, self.stress_mass_asdat, self.s1)
-                self.s0.assign(self.s1)
+                    # Solve for the stress tensor field.
+                    self.solve(self.rhs_sh1, self.stress_mass_asdat, self.sh1)
+                    self.solve(self.rhs_utemp, self.velocity_mass_asdat, self.utemp)
+                    self.solve(self.rhs_sh2, self.stress_mass_asdat, self.sh2)
+                    self.solve(self.rhs_s1, self.stress_mass_asdat, self.s1)
+                    self.s0.assign(self.s1)
 
                 # Write out the new fields
                 self.write(self.u1, self.s1)
@@ -425,7 +424,7 @@ class ExplosiveSourceLF4():
         end = time()
 
         # Print runtime summary
-        output_time(start, end, tofile=True, fs=ElasticLF4.U, tile_size=tile_size)
+        output_time(start, end, tofile=True, fs=self.elastic.U, tile_size=tile_size)
 
 
 if __name__ == '__main__':
@@ -439,11 +438,17 @@ if __name__ == '__main__':
     configuration['profiling'] = True
 
     # Parse the input
-    args = parser()
+    args = parser(profile=False)
     tiling = {
         'num_unroll': args.num_unroll,
         'tile_size': args.tile_size,
         'mode': args.fusion_mode
     }
+    profile = args.profile
 
-    ExplosiveSourceLF4().explosive_source_lf4(T=2.5, tiling=tiling)
+    if not profile:
+        ExplosiveSourceLF4().explosive_source_lf4(T=2.5, tiling=tiling)
+    else:
+        import cProfile
+        cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(T=0.1, tiling=tiling)',
+                     'log.cprofile')
