@@ -449,6 +449,11 @@ if __name__ == '__main__':
     if not profile:
         ExplosiveSourceLF4().explosive_source_lf4(T=2.5, tiling=tiling)
     else:
+        try:
+            interval = float(profile)
+        except:
+            warning("Profiling activated, but no Time interval specified. Using default T=0.1.")
+            interval = 0.1
         import cProfile
-        cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(T=0.1, tiling=tiling)',
+        cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(T=%f, tiling=tiling)' % interval,
                      'log.cprofile')
