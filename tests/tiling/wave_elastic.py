@@ -385,7 +385,7 @@ class ExplosiveSourceLF4():
     def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, output=True, tiling=None):
 
         with timed_region('mesh generation'):
-            mesh = self.generate_mesh()
+            mesh = self.generate_mesh(Lx, Ly, h)
             self.elastic = ElasticLF4(mesh, "DG", 2, dimension=2, output=output, tiling=tiling)
 
         # Tiling info
@@ -439,15 +439,22 @@ if __name__ == '__main__':
 
     # Parse the input
     args = parser(profile=False)
+    profile = args.profile
+    mesh_size = args.mesh_size
     tiling = {
         'num_unroll': args.num_unroll,
         'tile_size': args.tile_size,
         'mode': args.fusion_mode
     }
-    profile = args.profile
+
+    # Set the mesh size based on input parameters
+    try:
+        Lx, Ly, h = eval(mesh_size)
+    except:
+        Lx, Ly, h = 300.0, 150.0, 2.5
 
     if not profile:
-        ExplosiveSourceLF4().explosive_source_lf4(T=2.5, tiling=tiling)
+        ExplosiveSourceLF4().explosive_source_lf4(T=2.5, Lx=Lx, Ly=Ly, h=h, tiling=tiling)
     else:
         try:
             interval = float(profile)
@@ -455,5 +462,5 @@ if __name__ == '__main__':
             warning("Profiling activated, but no Time interval specified. Using default T=0.1.")
             interval = 0.1
         import cProfile
-        cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(T=%f, tiling=tiling)' % interval,
+        cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(T=%f, Lx=Lx, Ly=Ly, h=h, tiling=tiling)' % interval,
                      'log.cprofile')
