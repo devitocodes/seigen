@@ -67,6 +67,9 @@ class ElasticLF4(object):
             # File output streams
             self.u_stream = File("velocity.pvd")
             self.s_stream = File("stress.pvd")
+            
+      self.forward_solutions_u = []
+      self.forward_solutions_s = []
       
    @property
    def absorption(self):
@@ -253,13 +256,15 @@ class ElasticLF4(object):
                pass # FIXME: Cannot currently write tensor valued fields to a VTU file. See https://github.com/firedrakeproject/firedrake/issues/538
                #self.s_stream << s
 
-   def run(self, T):
+   def run(self, T, reverse_time=False):
       """ Run the elastic wave simulation until t = T.
       :param float T: The finish time of the simulation.
       :returns: The final solution fields for velocity and stress.
       """
-      self.write(self.u1, self.s1) # Write out the initial condition.
-
+      #self.write(self.u1, self.s1) # Write out the initial condition.
+      V = FunctionSpace(self.mesh, "DG", 1)
+      image = Function(V)
+      
       if self.explicit:
          print "Generating inverse mass matrix"
          # Pre-assemble the inverse mass matrices, which should stay
@@ -279,15 +284,30 @@ class ElasticLF4(object):
             solver_s1 = self.create_solver(self.form_s1, self.s1)
 
       with timed_region('timestepping'):
-         t = self.dt
-         while t <= T + 1e-12:
+         ts = 1
+         
+         if reverse_time:
+            self.dt = -self.dt
+            t = T + self.dt
+            self.u0.assign(self.forward_solutions_u[-1])
+            self.s0.assign(self.forward_solutions_s[-1])
+         else:
+            t = self.dt
+            self.forward_solutions_u.append(project(self.u1, self.U))
+            self.forward_solutions_s.append(project(self.s1, self.S))
+            
+         while (t <= T + 1e-12 if not reverse_time else t >= 0):
             print "t = %f" % t
             
             # In case the source is time-dependent, update the time 't' here.
-            if(self.source):
+            if(self.source and not reverse_time):
                with timed_region('source term update'):
                   self.source_expression.t = t
                   self.source = self.source_expression
+            elif(self.source and reverse_time):
+               self.source_expression = Expression((("0.0", "0.0"),
+                                                    ("0.0", "0.0")))
+               self.source = self.source_expression
             
             # Solve for the velocity vector field.
             if self.explicit:
@@ -322,7 +342,20 @@ class ElasticLF4(object):
             # Write out the new fields
             self.write(self.u1, self.s1)
             
+            if(not reverse_time):
+               self.forward_solutions_u.append(project(self.u1, self.U))
+               self.forward_solutions_s.append(project(self.s1, self.S))
+            
+            if(reverse_time):
+               self.u0.assign(self.forward_solutions_u[-1 - ts])
+               self.s0.assign(self.forward_solutions_s[-1 - ts])
+               
+               image += project(dot(self.u1.split()[0], self.forward_solutions_u[-1 - ts].split()[0]), V)
+               
+            
             # Move onto next timestep
             t += self.dt
-      
+            ts += 1
+
+      File("test.pvd") << image
       return self.u1, self.s1
