@@ -18,18 +18,19 @@ from utils.benchmarking import parser, output_time
 
 # This is an explicit DG method: we invert the mass matrix and perform a matrix-vector multiplication to get the solution
 
+
 class ElasticLF4(object):
     r""" An elastic wave equation solver, using the finite element method for spatial discretisation,
     and a fourth-order leap-frog time-stepping scheme. """
 
-    def __init__(self, mesh, family, degree, dimension, output=True, tiling=None):
+    def __init__(self, mesh, family, degree, dimension, output=1, tiling=None):
         r""" Initialise a new elastic wave simulation.
 
         :param mesh: The underlying computational mesh of vertices and edges.
         :param str family: Specify whether CG or DG should be used.
         :param int degree: Use polynomial basis functions of this degree.
         :param int dimension: The spatial dimension of the problem (1, 2 or 3).
-        :param bool output: If True, output the solution fields to a file.
+        :param int output: period, in timesteps, to write solution fields to a file.
         :param dict tiling: Parameters driving tiling (tile size, unroll factor, mode, ...)
         :returns: None
         """
@@ -275,14 +276,14 @@ class ElasticLF4(object):
                      F_a.dat(op2.READ, F_a.cell_node_map()),
                      result.dat(op2.WRITE, result.cell_node_map()))
 
-    def write(self, u=None, s=None):
+    def write(self, u=None, s=None, output=True):
         r""" Write the velocity and/or stress fields to file.
         :param firedrake.Function u: The velocity field.
         :param firedrake.Function s: The stress field.
         :returns: None
         """
-        if self.output:
-            _trace.evaluate_all()
+        _trace.evaluate_all()
+        if output:
             with timed_region('i/o'):
                 if(u):
                     self.u_stream << u
@@ -306,6 +307,7 @@ class ElasticLF4(object):
 
         with timed_region('timestepping'):
             t = self.dt
+            timestep = 0
             while t <= T + 1e-12:
                 print "t = %f" % t
                 with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf, mode=self.tiling_mode):
@@ -330,10 +332,11 @@ class ElasticLF4(object):
                     self.s0.assign(self.s1)
 
                 # Write out the new fields
-                self.write(self.u1, self.s1)
+                self.write(self.u1, self.s1, timestep % self.output == 0)
 
                 # Move onto next timestep
                 t += self.dt
+                timestep += 1
 
         return self.u1, self.s1
 
@@ -382,7 +385,7 @@ class ExplosiveSourceLF4():
         slope(mesh, debug=True)
         return mesh
 
-    def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, output=True, tiling=None):
+    def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, output=1, tiling=None):
 
         with timed_region('mesh generation'):
             mesh = self.generate_mesh(Lx, Ly, h)
@@ -440,20 +443,29 @@ if __name__ == '__main__':
     configuration['profiling'] = True
 
     # Parse the input
-    args = parser(profile=False, check=False)
+    args = parser(profile=False, check=False, time_max=2.5)
     profile = args.profile
     check_output = args.check
     mesh_size = args.mesh_size
+    time_max = float(args.time_max)
     tiling = {
         'num_unroll': args.num_unroll,
         'tile_size': args.tile_size,
         'mode': args.fusion_mode
     }
 
+    # How often should we do I/O?
+    try:
+        output = int(args.output) or 1
+    except:
+        # Every timestep
+        output = 1
+
     # Set the mesh size based on input parameters
     try:
         Lx, Ly, h = eval(mesh_size)
     except:
+        # Original mesh size
         Lx, Ly, h = 300.0, 150.0, 2.5
 
     if profile:
@@ -463,12 +475,12 @@ if __name__ == '__main__':
             warning("Profiling activated, but no Time interval specified. Using default T=0.1.")
             interval = 0.1
         import cProfile
-        cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(T=%f, Lx=Lx, Ly=Ly, h=h, tiling=tiling)' % interval,
+        cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(%f, Lx, Ly, h, output, tiling)' % interval,
                      'log.cprofile')
     else:
-        u1, s1 = ExplosiveSourceLF4().explosive_source_lf4(T=2.5, Lx=Lx, Ly=Ly, h=h, tiling=tiling)
+        u1, s1 = ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h, output, tiling)
         if check_output:
             orig = {'num_unroll': 0, 'tile_size': 0, 'mode': None}
-            u1_orig, s1_orig = ExplosiveSourceLF4().explosive_source_lf4(T=2.5, Lx=Lx, Ly=Ly, h=h, tiling=orig)
+            u1_orig, s1_orig = ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h, output, orig)
             assert np.allclose(u1.dat.data, u1_orig.dat.data, rtol=1e-10)
             assert np.allclose(s1.dat.data, s1_orig.dat.data, rtol=1e-10)
