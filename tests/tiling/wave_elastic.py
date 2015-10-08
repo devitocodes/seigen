@@ -420,11 +420,13 @@ class ExplosiveSourceLF4():
 
         # Run the simulation
         start = time()
-        self.elastic.run(T)
+        u1, s1 = self.elastic.run(T)
         end = time()
 
         # Print runtime summary
         output_time(start, end, tofile=True, fs=self.elastic.U, tile_size=tile_size)
+
+        return u1, s1
 
 
 if __name__ == '__main__':
@@ -438,8 +440,9 @@ if __name__ == '__main__':
     configuration['profiling'] = True
 
     # Parse the input
-    args = parser(profile=False)
+    args = parser(profile=False, check=False)
     profile = args.profile
+    check_output = args.check
     mesh_size = args.mesh_size
     tiling = {
         'num_unroll': args.num_unroll,
@@ -453,9 +456,7 @@ if __name__ == '__main__':
     except:
         Lx, Ly, h = 300.0, 150.0, 2.5
 
-    if not profile:
-        ExplosiveSourceLF4().explosive_source_lf4(T=2.5, Lx=Lx, Ly=Ly, h=h, tiling=tiling)
-    else:
+    if profile:
         try:
             interval = float(profile)
         except:
@@ -464,3 +465,10 @@ if __name__ == '__main__':
         import cProfile
         cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(T=%f, Lx=Lx, Ly=Ly, h=h, tiling=tiling)' % interval,
                      'log.cprofile')
+    else:
+        u1, s1 = ExplosiveSourceLF4().explosive_source_lf4(T=2.5, Lx=Lx, Ly=Ly, h=h, tiling=tiling)
+        if check_output:
+            orig = {'num_unroll': 0, 'tile_size': 0, 'mode': None}
+            u1_orig, s1_orig = ExplosiveSourceLF4().explosive_source_lf4(T=2.5, Lx=Lx, Ly=Ly, h=h, tiling=orig)
+            assert np.allclose(u1.dat.data, u1_orig.dat.data, rtol=1e-10)
+            assert np.allclose(s1.dat.data, s1_orig.dat.data, rtol=1e-10)
