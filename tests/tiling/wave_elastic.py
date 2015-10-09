@@ -23,6 +23,9 @@ class ElasticLF4(object):
     r""" An elastic wave equation solver, using the finite element method for spatial discretisation,
     and a fourth-order leap-frog time-stepping scheme. """
 
+    # Constants
+    loop_chain_length = 28
+
     def __init__(self, mesh, family, degree, dimension, output=1, tiling=None):
         r""" Initialise a new elastic wave simulation.
 
@@ -393,6 +396,7 @@ class ExplosiveSourceLF4():
 
         # Tiling info
         tile_size = tiling['tile_size']
+        num_unroll = tiling['num_unroll']
 
         # Constants
         self.elastic.density = 1.0
@@ -427,7 +431,11 @@ class ExplosiveSourceLF4():
         end = time()
 
         # Print runtime summary
-        output_time(start, end, tofile=True, fs=self.elastic.U, tile_size=tile_size)
+        output_time(start, end,
+                    tofile=True,
+                    fs=self.elastic.U,
+                    nloops=ElasticLF4.loop_chain_length * num_unroll,
+                    tile_size=tile_size)
 
         return u1, s1
 
