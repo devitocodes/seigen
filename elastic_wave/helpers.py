@@ -28,3 +28,13 @@ def Vs(mu, density):
    :rtype: float
    """
    return sqrt(mu/density)
+
+def cfl_dt(dx, Vp, courant_number):
+   r""" Computes the maximum permitted value for the timestep math:`\delta t`.
+   :param float dx: The characteristic element length.
+   :param float Vp: The P-wave velocity.
+   :param float courant_number: The desired Courant number
+   :returns: The maximum permitted timestep, math:`\delta t`.
+   :rtype: float
+   """
+   return (courant_number*dx)/Vp
