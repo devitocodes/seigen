@@ -30,7 +30,7 @@ def Vs(mu, density):
    return sqrt(mu/density)
 
 def cfl_dt(dx, Vp, courant_number):
-   r""" Computes the maximum permitted value for the timestep math:`\delta t`.
+   r""" Computes the maximum permitted value for the timestep math:`\delta t` with respect to the CFL condition.
    :param float dx: The characteristic element length.
    :param float Vp: The P-wave velocity.
    :param float courant_number: The desired Courant number
