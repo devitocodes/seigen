@@ -7,7 +7,7 @@ from elastic_wave.helpers import *
 
 class Eigenmode2DLF4():
 
-   def __init__(self, N, degree, dt, explicit=True, output=True):
+   def __init__(self, N, degree, dt, explicit=False, output=True):
       with timed_region('mesh generation'):
          self.mesh = UnitSquareMesh(N, N)
 
@@ -26,7 +26,7 @@ class Eigenmode2DLF4():
       self.a = sqrt(2)*pi*Vs(self.elastic.mu, self.elastic.density)
       self.b = 2*pi*self.elastic.mu
 
-   def eigenmode2d(self, T=5.0):
+   def eigenmode2d(self, T=0.25):
       # Initial conditions
       uic = Expression(('a*cos(pi*x[0])*sin(pi*x[1])*cos(a*t)',
                         '-a*sin(pi*x[0])*cos(pi*x[1])*cos(a*t)'), a=self.a, t=0)
@@ -36,7 +36,9 @@ class Eigenmode2DLF4():
                        a=self.a, b=self.b, t=self.elastic.dt/2.0)
       self.elastic.s0.assign(Function(self.elastic.S).interpolate(sic))
 
-      return self.elastic.run(T)
+      self.elastic.run(T)
+      self.elastic.run(T, reverse_time=True)
+      return 
 
    def eigenmode_error(self, u1, s1):
       uexact_e = Expression(('a*cos(pi*x[0])*sin(pi*x[1])*cos(a*t)',
@@ -66,8 +68,8 @@ class Eigenmode2DLF4():
       return u_error, s_error
 
 def convergence_analysis():
-   degrees = range(1, 5)
-   N = [2**i for i in range(2, 6)]
+   degrees = range(1, 2)
+   N = [2**i for i in range(4, 5)]
    
    dx = [1.0/n for n in N]  
    

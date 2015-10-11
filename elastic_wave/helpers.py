@@ -38,3 +38,23 @@ def cfl_dt(dx, Vp, courant_number):
    :rtype: float
    """
    return (courant_number*dx)/Vp
+
+def l(fs, Vp, Vs, density):
+   r""" Calculate the second Lame parameter from the velocity models. 
+   
+   :param Vp: The P-wave velocity.
+   :param Vs: The S-wave velocity.
+   :param density: The density.
+   :returns: The second Lame parameter $\lambda$.
+   """
+   return project(density*(Vp**2 - 2*(Vs**2)), fs, name="LameLambda")
+   
+def mu(fs, Vs, density):
+   r""" Calculate the first Lame parameter from the velocity models. 
+   
+   :param Vs: The S-wave velocity.
+   :param density: The density.
+   :returns: The first Lame parameter $\mu$.
+   """
+   return project(density*(Vs**2), fs, name="LameMu")
+

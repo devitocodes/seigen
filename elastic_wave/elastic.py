@@ -217,7 +217,7 @@ class ElasticLF4(object):
    
    def g(self, v, u1, I, n, l, mu, source=None):
       """ The RHS of the stress equation. """
-      g =  - l*(v[i,j]*I[i,j]).dx(k)*u1[k]*dx + l*(jump(v[i,j], n[k])*I[i,j]*avg(u1[k]))*dS + l*(v[i,j]*I[i,j]*u1[k]*n[k])*ds - mu*inner(div(v), u1)*dx + mu*inner(avg(u1), jump(v, n))*dS - mu*inner(div(v.T), u1)*dx + mu*inner(avg(u1), jump(v.T, n))*dS + mu*inner(u1, dot(v, n))*ds + mu*inner(u1, dot(v.T, n))*ds
+      g =  - l('+')*(v[i,j]*I[i,j]).dx(k)*u1[k]*dx + l('+')*(jump(v[i,j], n[k])*I[i,j]*avg(u1[k]))*dS + l('+')*(v[i,j]*I[i,j]*u1[k]*n[k])*ds - mu('+')*inner(div(v), u1)*dx + mu('+')*inner(avg(u1), jump(v, n))*dS - mu('+')*inner(div(v.T), u1)*dx + mu('+')*inner(avg(u1), jump(v.T, n))*dS + mu('+')*inner(u1, dot(v, n))*ds + mu('+')*inner(u1, dot(v.T, n))*ds
       if(source):
          g += inner(v, source)*dx
       return g
@@ -300,14 +300,14 @@ class ElasticLF4(object):
             print "t = %f" % t
             
             # In case the source is time-dependent, update the time 't' here.
-            if(self.source and not reverse_time):
+            if(self.source):
                with timed_region('source term update'):
                   self.source_expression.t = t
                   self.source = self.source_expression
-            elif(self.source and reverse_time):
-               self.source_expression = Expression((("0.0", "0.0"),
-                                                    ("0.0", "0.0")))
-               self.source = self.source_expression
+            #elif(self.source and reverse_time):
+            #   self.source_expression = Expression((("0.0", "0.0"),
+            #                                        ("0.0", "0.0")))
+            #   self.source = self.source_expression
             
             # Solve for the velocity vector field.
             if self.explicit:

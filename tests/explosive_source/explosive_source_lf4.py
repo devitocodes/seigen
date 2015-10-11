@@ -11,7 +11,7 @@ class ExplosiveSourceLF4():
       return RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
 
    def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5,
-                            explicit=True, output=True):
+                            explicit=False, output=True):
 
       with timed_region('mesh generation'):
          mesh = self.generate_mesh()
@@ -19,9 +19,10 @@ class ExplosiveSourceLF4():
                                    explicit=explicit, output=output)
 
       # Constants
+      D = FunctionSpace(mesh, "DG", 2)
       self.elastic.density = 1.0
-      self.elastic.mu = 3600.0
-      self.elastic.l = 3599.3664
+      self.elastic.mu = Function(D).interpolate(Expression("x[1] >= 140 ? 3600.0 : 4500.0"))
+      self.elastic.l = Function(D).interpolate(Expression("x[1] >= 140 ? 3599.3664 : 4499.208"))
       
       self.Vp = Vp(self.elastic.mu, self.elastic.l, self.elastic.density)
       self.Vs = Vs(self.elastic.mu, self.elastic.density)
@@ -55,6 +56,7 @@ class ExplosiveSourceLF4():
       # Start the simulation
       with timed_region('elastic-run'):
          self.elastic.run(T)
+         self.elastic.run(T, reverse_time=True)
 
 
 if __name__ == '__main__':
@@ -62,4 +64,4 @@ if __name__ == '__main__':
     from ffc.log import set_level
     set_level('ERROR')
 
-    ExplosiveSourceLF4().explosive_source_lf4(T=2.5)
+    ExplosiveSourceLF4().explosive_source_lf4(T=1.0)
