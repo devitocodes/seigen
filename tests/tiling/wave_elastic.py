@@ -15,6 +15,7 @@ import numpy as np
 from time import time
 
 from utils.benchmarking import parser, output_time
+from utils.tiling import calculate_sdepth
 
 # This is an explicit DG method: we invert the mass matrix and perform a matrix-vector multiplication to get the solution
 
@@ -25,6 +26,7 @@ class ElasticLF4(object):
 
     # Constants
     loop_chain_length = 28
+    num_solves = 8
 
     def __init__(self, mesh, family, degree, dimension, output=1, tiling=None):
         r""" Initialise a new elastic wave simulation.
@@ -79,6 +81,7 @@ class ElasticLF4(object):
             self.tiling_size = tiling['tile_size']
             self.tiling_uf = tiling['num_unroll']
             self.tiling_mode = tiling['mode']
+            self.tiling_halo = tiling['extra_halo']
 
         if self.output:
             with timed_region('i/o'):
@@ -313,7 +316,8 @@ class ElasticLF4(object):
             timestep = 0
             while t <= T + 1e-12:
                 print "t = %f" % t
-                with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf, mode=self.tiling_mode):
+                with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf,
+                                mode=self.tiling_mode, extra_halo=self.tiling_halo):
                     # In case the source is time-dependent, update the time 't' here.
                     if(self.source):
                         with timed_region('source term update'):
@@ -381,22 +385,23 @@ def Vs(mu, density):
 
 class ExplosiveSourceLF4():
 
-    def generate_mesh(self, Lx=300.0, Ly=150.0, h=2.5):
+    def generate_mesh(self, Lx=300.0, Ly=150.0, h=2.5, num_unroll=1, extra_halo=0):
         mesh = RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
-        mesh.init(s_depth=1)
+        mesh.init(s_depth=calculate_sdepth(ElasticLF4.num_solves, num_unroll, extra_halo))
         # This is only to print out info related to tiling
         slope(mesh, debug=True)
         return mesh
 
     def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, output=1, tiling=None):
 
-        with timed_region('mesh generation'):
-            mesh = self.generate_mesh(Lx, Ly, h)
-            self.elastic = ElasticLF4(mesh, "DG", 2, dimension=2, output=output, tiling=tiling)
-
         # Tiling info
         tile_size = tiling['tile_size']
         num_unroll = tiling['num_unroll']
+        extra_halo = tiling['extra_halo']
+
+        with timed_region('mesh generation'):
+            mesh = self.generate_mesh(Lx, Ly, h, num_unroll, extra_halo)
+            self.elastic = ElasticLF4(mesh, "DG", 2, dimension=2, output=output, tiling=tiling)
 
         # Constants
         self.elastic.density = 1.0
@@ -450,6 +455,8 @@ if __name__ == '__main__':
     # Switch on PyOP2 profiling
     configuration['profiling'] = True
 
+    # Should I add a nonexec region ?
+
     # Parse the input
     args = parser(profile=False, check=False, time_max=2.5)
     profile = args.profile
@@ -459,7 +466,8 @@ if __name__ == '__main__':
     tiling = {
         'num_unroll': args.num_unroll,
         'tile_size': args.tile_size,
-        'mode': args.fusion_mode
+        'mode': args.fusion_mode,
+        'extra_halo': args.extra_halo
     }
 
     # How often should we do I/O?
