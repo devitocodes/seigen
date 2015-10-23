@@ -134,20 +134,28 @@ class ElasticLF4(object):
 
     def copy_massmatrix_into_dat(self):
         # Copy the velocity mass matrix into a Dat
+        vmat = self.imass_velocity.handle
         arity = sum(self.U._dofs_per_entity)*self.U.cdim
         self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
-        for i in range(self.mesh.num_cells()):
-            indices = PETSc.IS().createGeneral(i*arity + np.arange(arity, dtype=np.int32))
-            val = self.imass_velocity.handle.getSubMatrix(indices, indices)
-            self.velocity_mass_asdat.data[i] = val[:, :].flatten()
+        istart, iend = vmat.getOwnershipRange()
+        idxs = [ PETSc.IS().createGeneral(numpy.arange(i, i+arity, dtype=numpy.int32),
+                                          comm=PETSc.COMM_SELF)
+                 for i in range(istart, iend, arity)]
+        submats = vmat.getSubMatrices(idxs, idxs)
+        for i, m in enumerate(submats):
+           self.velocity_mass_asdat.data[i] = m[:, :].flatten()
 
         # Copy the stress mass matrix into a Dat
+        smat = self.imass_stress.handle
         arity = sum(self.S._dofs_per_entity)*self.S.cdim
         self.stress_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
-        for i in range(self.mesh.num_cells()):
-            indices = PETSc.IS().createGeneral(i*arity + np.arange(arity, dtype=np.int32))
-            val = self.imass_stress.handle.getSubMatrix(indices, indices)
-            self.stress_mass_asdat.data[i] = val[:, :].flatten()
+        istart, iend = smat.getOwnershipRange()
+        idxs = [ PETSc.IS().createGeneral(numpy.arange(i, i+arity, dtype=numpy.int32),
+                                          comm=PETSc.COMM_SELF)
+                 for i in range(istart, iend, arity)]
+        submats = smat.getSubMatrices(idxs, idxs)
+        for i, m in enumerate(submats):
+           self.stress_mass_asdat.data[i] = m[:, :].flatten()
 
     @property
     def form_uh1(self):
