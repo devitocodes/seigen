@@ -4,18 +4,37 @@ from pybench import parser
 class EigenmodePlot(EigenmodeBench):
     figsize = (6, 4)
 
+    def plot_strong_scaling(self, nprocs, dim, size, degrees, dt, time, explicit, opt):
+        b.combine_series([('np', nprocs), ('dim', dim), ('size', size),
+                          ('degree', degrees), ('dt', dt), ('T', time),
+                          ('explicit', args.explicit), ('opt', args.opt)],
+                         filename='EigenmodeLF4')
+
+        groups = ['explicit', 'opt']
+        xlabel = 'Number of processors'
+        b.plot(figsize=b.figsize, format='pdf', figname='SeigenStrong',
+               xaxis='np', xlabel=xlabel, xticklabels=args.parallel,
+               groups=groups, regions=regions, kinds='loglog', axis='tight',
+               title='', labels=labels, legend={'loc': 'best'})
+
+
 if __name__ == '__main__':
     p = parser(description="Performance benchmark for 2D eigenmode test.")
+    p.add_argument('mode', choices=('strong', 'error', 'comparison'),
+                   nargs='?', default='scaling',
+                   help='determines type of plot to generate')
     p.add_argument('--dim', type=int, default=3,
                    help='problem dimension to plot')
-    p.add_argument('-N', '--size', type=int, nargs='+',
+    p.add_argument('-N', '--size', type=int, nargs='+', default=[32],
                    help='mesh sizes to plot')
-    p.add_argument('-d', '--degree', type=int, nargs='+',
+    p.add_argument('-d', '--degree', type=int, nargs='+', default=[4],
                    help='polynomial degrees to plot')
-    p.add_argument('-T', '--time', type=float, nargs='+',
+    p.add_argument('-T', '--time', type=float, nargs='+', default=[2.0],
                    help='total simulated time')
-    p.add_argument('--error', default=False, action='store_true',
-                   help='plot error vs. run-time analysis')
+    p.add_argument('--explicit', nargs='+', default=[True],
+                   help='Explicit solver method used (True or False)')
+    p.add_argument('--opt', type=int, nargs='+', default=[3],
+                   help='Coffee optimisation levels used')
     args = p.parse_args()
     dim = args.dim
     degrees = args.degree or [1, 2, 3, 4]
@@ -29,7 +48,12 @@ if __name__ == '__main__':
     b = EigenmodePlot(benchmark='Eigenmode2D-Performance',
                       resultsdir=args.resultsdir, plotdir=args.plotdir)
 
-    if args.error:
+    if args.mode == 'strong':
+        b.plot_strong_scaling(nprocs=nprocs, dim=[args.dim], size=args.size,
+                              degrees=degrees, dt=[0.125], time=args.time,
+                              explicit=args.explicit, opt=args.opt)
+
+    if args.mode == 'error':
         from itertools import product
         import numpy as np
         import matplotlib.pyplot as plt
@@ -121,7 +145,7 @@ if __name__ == '__main__':
                     orientation='landscape', format='pdf',
                     transparent=True, bbox_inches='tight')
 
-    else:
+    elif args.mode == 'comparison':
         # Bar comparison between explicit/implicit and coffe -O3 parameters
         groups = ['explicit', 'opt']
         b.combine_series([('np', nprocs), ('dim', [dim]), ('size', args.size or [32]),
