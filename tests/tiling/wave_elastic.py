@@ -391,6 +391,17 @@ def Vs(mu, density):
     return sqrt(mu/density)
 
 
+def cfl_dt(dx, Vp, courant_number):
+   r""" Computes the maximum permitted value for the timestep math:`\delta t`.
+   :param float dx: The characteristic element length.
+   :param float Vp: The P-wave velocity.
+   :param float courant_number: The desired Courant number
+   :returns: The maximum permitted timestep, math:`\delta t`.
+   :rtype: float
+   """
+   return (courant_number*dx)/Vp
+
+
 # Test cases
 
 class ExplosiveSourceLF4():
@@ -415,12 +426,18 @@ class ExplosiveSourceLF4():
 
         # Constants
         self.elastic.density = 1.0
-        self.elastic.dt = 0.001
         self.elastic.mu = 3600.0
         self.elastic.l = 3599.3664
 
-        print "P-wave velocity: %f" % Vp(self.elastic.mu, self.elastic.l, self.elastic.density)
-        print "S-wave velocity: %f" % Vs(self.elastic.mu, self.elastic.density)
+        self.Vp = Vp(self.elastic.mu, self.elastic.l, self.elastic.density)
+        self.Vs = Vs(self.elastic.mu, self.elastic.density)
+        print "P-wave velocity: %f" % self.Vp
+        print "S-wave velocity: %f" % self.Vs
+
+        self.dx = h
+        self.courant_number = 0.5
+        self.elastic.dt = cfl_dt(self.dx, self.Vp, self.courant_number)
+        print "Using a timestep of %f" % self.elastic.dt # This was previously hard-coded to be 0.001 s.
 
         # Source
         a = 159.42
