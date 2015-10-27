@@ -82,6 +82,7 @@ class ElasticLF4(object):
             self.tiling_uf = tiling['num_unroll']
             self.tiling_mode = tiling['mode']
             self.tiling_halo = tiling['extra_halo']
+            self.tiling_part = tiling['partitioning']
 
         if self.output:
             with timed_region('i/o'):
@@ -138,7 +139,7 @@ class ElasticLF4(object):
         arity = sum(self.U._dofs_per_entity)*self.U.cdim
         self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
         istart, iend = vmat.getOwnershipRange()
-        idxs = [ PETSc.IS().createGeneral(numpy.arange(i, i+arity, dtype=numpy.int32),
+        idxs = [ PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
                                           comm=PETSc.COMM_SELF)
                  for i in range(istart, iend, arity)]
         submats = vmat.getSubMatrices(idxs, idxs)
@@ -150,7 +151,7 @@ class ElasticLF4(object):
         arity = sum(self.S._dofs_per_entity)*self.S.cdim
         self.stress_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
         istart, iend = smat.getOwnershipRange()
-        idxs = [ PETSc.IS().createGeneral(numpy.arange(i, i+arity, dtype=numpy.int32),
+        idxs = [ PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
                                           comm=PETSc.COMM_SELF)
                  for i in range(istart, iend, arity)]
         submats = smat.getSubMatrices(idxs, idxs)
@@ -325,7 +326,8 @@ class ElasticLF4(object):
             while t <= T + 1e-12:
                 print "t = %f" % t
                 with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf,
-                                mode=self.tiling_mode, extra_halo=self.tiling_halo):
+                                mode=self.tiling_mode, extra_halo=self.tiling_halo,
+                                partitioning=self.tiling_part):
                     # In case the source is time-dependent, update the time 't' here.
                     if(self.source):
                         with timed_region('source term update'):
@@ -475,6 +477,7 @@ if __name__ == '__main__':
         'num_unroll': args.num_unroll,
         'tile_size': args.tile_size,
         'mode': args.fusion_mode,
+        'partitioning': args.part_mode,
         'extra_halo': args.extra_halo
     }
 
