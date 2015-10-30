@@ -262,33 +262,36 @@ class ElasticLF4(object):
             g += inner(v, source)*dx
         return g
 
-    def solve(self, rhs, matrix_asdat, result):
-        F_a = assemble(rhs)
+    @cached_property
+    def ast_matmul(self):
+        """Generate an AST for a PyOP2 kernel performing a matrix-vector multiplication."""
 
         # The number of dofs on each element is /ndofs*cdim/. If using vector-valued function spaces,
         # the total number of values is /ndofs*cdim/
-        F_a_fs = F_a.function_space()
+        F_a_fs = self.F_a.function_space()
         ndofs = sum(F_a_fs._dofs_per_entity)
         cdim = F_a_fs.cdim
 
-        # The AST of the mat-vel mul
+        # Craft the AST
         body = ast.Incr(ast.Symbol('C', ('i/%d' % cdim, 'i%%%d' % cdim)),
-                        ast.Prod(ast.Symbol('A', ('i',), (('N', 'j*%d + k' % cdim),)),
+                        ast.Prod(ast.Symbol('A', ('i',), ((ndofs*cdim, 'j*%d + k' % cdim),)),
                                  ast.Symbol('B', ('j', 'k'))))
         body = ast.c_for('k', cdim, body).children[0]
         body = [ast.Assign(ast.Symbol('C', ('i/%d' % cdim, 'i%%%d' % cdim)), '0.0'),
                 ast.c_for('j', ndofs, body).children[0]]
-        body = ast.Root([ast.Decl('int', 'N', ast.Prod(ndofs, cdim), ['const']),
-                         ast.c_for('i', 'N', body).children[0]])
+        body = ast.Root([ast.c_for('i', ndofs*cdim, body).children[0]])
         funargs = [ast.Decl('double*', 'A'), ast.Decl('double**', 'B'), ast.Decl('double**', 'C')]
-        name = 'mat_vec_mul_kernel_%s' % F_a.function_space().name
-        fundecl = ast.FunDecl('void', name, funargs, body, ['static', 'inline'])
+        name = 'mat_vec_mul_kernel_%s' % F_a_fs.name
+        return ast.FunDecl('void', name, funargs, body, ['static', 'inline'])
+
+    def solve(self, rhs, matrix_asdat, result):
+        self.F_a = assemble(rhs)
 
         # Create the par loop (automatically added to the trace of loops to be executed)
-        kernel = op2.Kernel(fundecl, name)
+        kernel = op2.Kernel(self.ast_matmul, self.ast_matmul.name)
         op2.par_loop(kernel, self.mesh.cell_set,
                      matrix_asdat(op2.READ),
-                     F_a.dat(op2.READ, F_a.cell_node_map()),
+                     self.F_a.dat(op2.READ, self.F_a.cell_node_map()),
                      result.dat(op2.WRITE, result.cell_node_map()))
 
     def write(self, u=None, s=None, output=True):
