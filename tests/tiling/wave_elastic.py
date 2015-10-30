@@ -438,7 +438,7 @@ class ExplosiveSourceLF4():
         print "S-wave velocity: %f" % self.Vs
 
         self.dx = h
-        self.courant_number = 0.5
+        self.courant_number = 0.05
         self.elastic.dt = cfl_dt(self.dx, self.Vp, self.courant_number)
         print "Using a timestep of %f" % self.elastic.dt # This was previously hard-coded to be 0.001 s.
 
