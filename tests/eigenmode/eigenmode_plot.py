@@ -12,10 +12,21 @@ class EigenmodePlot(EigenmodeBench):
 
         groups = ['explicit', 'opt']
         xlabel = 'Number of processors'
+
+        # Plot classic strong scaling plot
         b.plot(figsize=b.figsize, format='pdf', figname='SeigenStrong',
                xaxis='np', xlabel=xlabel, xticklabels=args.parallel,
                groups=groups, regions=regions, kinds='loglog', axis='tight',
                title='', labels=labels, legend={'loc': 'best'})
+
+        # Plot parallel efficiency
+        efficiency = lambda xvals, yvals: [xvals[0]*yvals[0]/(x*y)
+                                           for x, y in zip(xvals, yvals)]
+        b.plot(figsize=b.figsize, format='pdf', figname='SeigenStrongEfficiency',
+               ylabel='Parallel efficiency w.r.t. %d cores' % nprocs[0],
+               xaxis='np', xlabel=xlabel, xticklabels=args.parallel,
+               groups=groups, regions=regions, kinds='semilogx', axis='tight',
+               title='', labels=labels, transform=efficiency, ymin=0)
 
 
 if __name__ == '__main__':
