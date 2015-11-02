@@ -13,6 +13,7 @@ from math import *
 import mpi4py
 import numpy as np
 from time import time
+import sys
 
 from utils.benchmarking import parser, output_time
 from utils.tiling import calculate_sdepth
@@ -485,12 +486,10 @@ if __name__ == '__main__':
     # Switch on PyOP2 profiling
     configuration['profiling'] = True
 
-    # Should I add a nonexec region ?
-
     # Parse the input
     args = parser(profile=False, check=False, time_max=2.5)
     profile = args.profile
-    check_output = args.check
+    check = args.check
     mesh_size = args.mesh_size
     time_max = float(args.time_max)
     tiling = {
@@ -501,6 +500,27 @@ if __name__ == '__main__':
         'extra_halo': args.extra_halo
     }
 
+    # Simulation constants
+    h = 2.5  # Cell size
+
+    # Is it just a run to check correctness?
+    if check:
+        Lx, Ly, time_max, tolerance = 20, 20, 0.01, 1e-10
+        print "Checking correctness of original and tiled versions, with:"
+        print "    (Lx, Ly, T, tolerance)=%s" % str((Lx, Ly, time_max, tolerance))
+        print "    %s" % tiling
+        # Run the tiled variant
+        u1, s1 = ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h, sys.maxint, tiling)
+        # Run the original code
+        original = {'num_unroll': 0, 'tile_size': 0, 'mode': None, 'partitioning': 'chunk', 'extra_halo': 0}
+        u1_orig, s1_orig = ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h, sys.maxint, original)
+        # Check output
+        print "Checking output..."
+        assert np.allclose(u1.dat.data, u1_orig.dat.data, rtol=1e-10)
+        assert np.allclose(s1.dat.data, s1_orig.dat.data, rtol=1e-10)
+        print "Results OK!"
+        sys.exit(0)
+
     # How often should we do I/O?
     try:
         output = int(args.output) or 1
@@ -510,24 +530,14 @@ if __name__ == '__main__':
 
     # Set the mesh size based on input parameters
     try:
-        Lx, Ly, h = eval(mesh_size)
+        Lx, Ly = eval(mesh_size)
     except:
         # Original mesh size
-        Lx, Ly, h = 300.0, 150.0, 2.5
+        Lx, Ly = 300.0, 150.0
 
     if profile:
-        try:
-            interval = float(profile)
-        except:
-            warning("Profiling activated, but no Time interval specified. Using default T=0.1.")
-            interval = 0.1
         import cProfile
-        cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(%f, Lx, Ly, h, output, tiling)' % interval,
+        cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h, output, tiling)',
                      'log.cprofile')
     else:
         u1, s1 = ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h, output, tiling)
-        if check_output:
-            orig = {'num_unroll': 0, 'tile_size': 0, 'mode': None}
-            u1_orig, s1_orig = ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h, output, orig)
-            assert np.allclose(u1.dat.data, u1_orig.dat.data, rtol=1e-10)
-            assert np.allclose(s1.dat.data, s1_orig.dat.data, rtol=1e-10)
