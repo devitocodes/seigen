@@ -481,8 +481,6 @@ if __name__ == '__main__':
     from ffc.log import set_level
     set_level('ERROR')
 
-    # Remove trace bound to avoid running inspections over and over
-    configuration['lazy_max_trace_length'] = 0
     # Switch on PyOP2 profiling
     configuration['profiling'] = True
 
