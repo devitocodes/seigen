@@ -471,7 +471,9 @@ class ExplosiveSourceLF4():
                     tofile=True,
                     fs=self.elastic.U,
                     nloops=ElasticLF4.loop_chain_length * num_unroll,
-                    tile_size=tile_size)
+                    partitioning=part_mode,
+                    tile_size=tile_size,
+                    extra_halo=extra_halo)
 
         return u1, s1
 
