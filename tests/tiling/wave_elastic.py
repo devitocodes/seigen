@@ -423,6 +423,7 @@ class ExplosiveSourceLF4():
         tile_size = tiling['tile_size']
         num_unroll = tiling['num_unroll']
         extra_halo = tiling['extra_halo']
+        part_mode = tiling['partitioning']
 
         with timed_region('mesh generation'):
             mesh = self.generate_mesh(Lx, Ly, h, num_unroll, extra_halo)
