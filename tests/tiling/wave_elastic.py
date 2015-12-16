@@ -137,7 +137,7 @@ class ElasticLF4(object):
     def copy_massmatrix_into_dat(self):
         # Copy the velocity mass matrix into a Dat
         vmat = self.imass_velocity.handle
-        arity = sum(self.U._dofs_per_entity)*self.U.cdim
+        arity = sum(self.U.topological.dofs_per_entity)*self.U.topological.dim
         self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
         istart, iend = vmat.getOwnershipRange()
         idxs = [ PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
@@ -149,7 +149,7 @@ class ElasticLF4(object):
 
         # Copy the stress mass matrix into a Dat
         smat = self.imass_stress.handle
-        arity = sum(self.S._dofs_per_entity)*self.S.cdim
+        arity = sum(self.S.topological.dofs_per_entity)*self.S.topological.dim
         self.stress_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
         istart, iend = smat.getOwnershipRange()
         idxs = [ PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
@@ -270,8 +270,8 @@ class ElasticLF4(object):
         # The number of dofs on each element is /ndofs*cdim/. If using vector-valued function spaces,
         # the total number of values is /ndofs*cdim/
         F_a_fs = self.F_a.function_space()
-        ndofs = sum(F_a_fs._dofs_per_entity)
-        cdim = F_a_fs.cdim
+        ndofs = sum(F_a_fs.topological.dofs_per_entity)
+        cdim = F_a_fs.dim
 
         # Craft the AST
         body = ast.Incr(ast.Symbol('C', ('i/%d' % cdim, 'i%%%d' % cdim)),
@@ -412,7 +412,7 @@ class ExplosiveSourceLF4():
 
     def generate_mesh(self, Lx=300.0, Ly=150.0, h=2.5, num_unroll=1, extra_halo=0):
         mesh = RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
-        mesh.init(s_depth=calculate_sdepth(ElasticLF4.num_solves, num_unroll, extra_halo))
+        mesh.topology.init(s_depth=calculate_sdepth(ElasticLF4.num_solves, num_unroll, extra_halo))
         # This is only to print out info related to tiling
         slope(mesh, debug=True)
         return mesh
