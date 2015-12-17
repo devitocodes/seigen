@@ -109,6 +109,9 @@ class ElasticLF4(object):
             self.mass_cache = os.path.join("/", "data", "cache")
             self.nocache = tiling['nocache']
 
+            # AST cache
+            self.asts = {}
+
         if self.output:
             with timed_region('i/o'):
                 # File output streams
