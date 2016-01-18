@@ -5,31 +5,38 @@ from pyop2.profiling import timed_region
 from pyop2.utils import cached_property
 op2.init(lazy_evaluation=False)
 from firedrake import *
+from firedrake.petsc import PETSc
 from elastic_wave.helpers import log
 import mpi4py
+import numpy as np
+import coffee.base as ast
 
 
 class ElasticLF4(object):
     r""" An elastic wave equation solver, using the finite element method for spatial discretisation,
     and a fourth-order leap-frog time-stepping scheme. """
 
-    def __init__(self, mesh, family, degree, dimension, explicit=True, output=True):
+    def __init__(self, mesh, family, degree, dimension, solver='explicit', output=True):
         r""" Initialise a new elastic wave simulation.
 
         :param mesh: The underlying computational mesh of vertices and edges.
         :param str family: Specify whether CG or DG should be used.
         :param int degree: Use polynomial basis functions of this degree.
         :param int dimension: The spatial dimension of the problem (1, 2 or 3).
-        :param bool explicit: If False, use PETSc to solve for the solution fields.
-                              Otherwise, explicitly invert the mass matrix and perform
-                              a matrix-vector multiplication to get the solution.
+        :param str mode: Solver mode, recognised values are:
+            'implicit': Use PETSc KSP solver to solve for the solution fields.
+            'explicit': Explicitly invert the mass matrix and perform a
+                        matrix-vector multiplication using PETSc MatMult.
+            'parloop': Explicitly invert the mass matrix and perform a
+                       matrix-vector multiplication using a PyOP2 Parloop.
         :param bool output: If True, output the solution fields to a file.
         :returns: None
         """
         with timed_region('function setup'):
             self.mesh = mesh
             self.dimension = dimension
-            self.explicit = explicit
+            self.solver = solver
+            self.explicit = solver in ['explicit', 'parloop']
             self.output = output
 
             self.S = TensorFunctionSpace(mesh, family, degree)
@@ -65,6 +72,9 @@ class ElasticLF4(object):
 
             self.n = FacetNormal(self.mesh)
             self.I = Identity(self.dimension)
+
+            # AST cache
+            self.asts = {}
 
         if self.output:
             with timed_region('i/o'):
@@ -114,6 +124,19 @@ class ElasticLF4(object):
         self.inverse_mass_stress = assemble(inner(self.v, self.s)*dx, inverse=True)
         self.inverse_mass_stress.assemble()
         self.imass_stress = self.inverse_mass_stress.M
+
+    def matrix_to_dat(self, massmatrix, functionspace):
+        # Copy the velocity mass matrix into a Dat
+        arity = sum(functionspace.topological.dofs_per_entity)*functionspace.topological.dim
+        dat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
+        istart, iend = massmatrix.handle.getOwnershipRange()
+        idxs = [PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
+                                         comm=PETSc.COMM_SELF)
+                for i in range(istart, iend, arity)]
+        submats = massmatrix.handle.getSubMatrices(idxs, idxs)
+        for i, m in enumerate(submats):
+            dat.data[i] = m[:, :].flatten()
+        return dat
 
     @property
     def form_uh1(self):
@@ -234,8 +257,8 @@ class ElasticLF4(object):
             g += inner(v, source)*dx
         return g
 
-    def solve(self, rhs, matrix, result):
-        r""" Solve by assembling RHS and applying inverse mass matrix.
+    def solve_petsc(self, rhs, matrix, result):
+        r""" Solve by assembling RHS and applying inverse mass matrix using PETSc MatMult.
         :param rhs: The RHS vector that the inverse mass matrix will be multiplied with.
         :param matrix: The inverse mass matrix.
         :param firedrake.Function result: The solution field.
@@ -244,6 +267,51 @@ class ElasticLF4(object):
         with result.dat.vec as res:
             with F_a.dat.vec_ro as F_v:
                 matrix.handle.mult(F_v, res)
+
+    def solve_parloop(self, rhs, matrix_asdat, result):
+        r""" Solve by assembling RHS and applying inverse mass matrix using a PyOP2 Parloop.
+        :param rhs: The RHS vector that the inverse mass matrix will be multiplied with.
+        :param matrix: The inverse mass matrix.
+        :param firedrake.Function result: The solution field.
+        :returns: None"""
+        F_a = assemble(rhs)
+        ast_matmul = self.ast_matmul(F_a)
+
+        # Create the par loop (automatically added to the trace of loops to be executed)
+        kernel = op2.Kernel(ast_matmul, ast_matmul.name)
+        op2.par_loop(kernel, self.mesh.cell_set,
+                     matrix_asdat(op2.READ),
+                     F_a.dat(op2.READ, F_a.cell_node_map()),
+                     result.dat(op2.WRITE, result.cell_node_map()))
+
+    def ast_matmul(self, F_a):
+        """Generate an AST for a PyOP2 kernel performing a matrix-vector multiplication."""
+
+        # The number of dofs on each element is /ndofs*cdim/
+        F_a_fs = F_a.function_space()
+        ndofs = sum(F_a_fs.topological.dofs_per_entity)
+        cdim = F_a_fs.dim
+        name = 'mat_vec_mul_kernel_%s' % F_a_fs.name
+
+        identifier = (ndofs, cdim, name)
+        if identifier in self.asts:
+            return self.asts[identifier]
+
+        # Craft the AST
+        body = ast.Incr(ast.Symbol('C', ('i/%d' % cdim, 'i%%%d' % cdim)),
+                        ast.Prod(ast.Symbol('A', ('i',), ((ndofs*cdim, 'j*%d + k' % cdim),)),
+                                 ast.Symbol('B', ('j', 'k'))))
+        body = ast.c_for('k', cdim, body).children[0]
+        body = [ast.Assign(ast.Symbol('C', ('i/%d' % cdim, 'i%%%d' % cdim)), '0.0'),
+                ast.c_for('j', ndofs, body).children[0]]
+        body = ast.Root([ast.c_for('i', ndofs*cdim, body).children[0]])
+        funargs = [ast.Decl('double*', 'A'), ast.Decl('double**', 'B'), ast.Decl('double**', 'C')]
+        fundecl = ast.FunDecl('void', name, funargs, body, ['static', 'inline'])
+
+        # Track the AST for later fast retrieval
+        self.asts[identifier] = fundecl
+
+        return fundecl
 
     def create_solver(self, form, result):
         r""" Create a solver object for a given form.
@@ -283,6 +351,9 @@ class ElasticLF4(object):
             # constant throughout the simulation (assuming no mesh adaptivity).
             with timed_region('inverse mass matrix'):
                 self.assemble_inverse_mass()
+                if self.solver == 'parloop':
+                    self.imass_velocity_dat = self.matrix_to_dat(self.imass_velocity, self.U)
+                    self.imass_stress_dat = self.matrix_to_dat(self.imass_stress, self.S)
         else:
             log("Creating solver contexts")
             with timed_region('solver setup'):
@@ -307,12 +378,16 @@ class ElasticLF4(object):
                         self.source = self.source_expression
 
                 # Solve for the velocity vector field.
-                if self.explicit:
-                    with timed_region('velocity solve'):
-                        self.solve(self.rhs_uh1, self.imass_velocity, self.uh1)
-                        self.solve(self.rhs_stemp, self.imass_stress, self.stemp)
-                        self.solve(self.rhs_uh2, self.imass_velocity, self.uh2)
-                        self.solve(self.rhs_u1, self.imass_velocity, self.u1)
+                if self.solver == 'explicit':
+                    self.solve_petsc(self.rhs_uh1, self.imass_velocity, self.uh1)
+                    self.solve_petsc(self.rhs_stemp, self.imass_stress, self.stemp)
+                    self.solve_petsc(self.rhs_uh2, self.imass_velocity, self.uh2)
+                    self.solve_petsc(self.rhs_u1, self.imass_velocity, self.u1)
+                elif self.solver == 'parloop':
+                    self.solve_parloop(self.rhs_uh1, self.imass_velocity_dat, self.uh1)
+                    self.solve_parloop(self.rhs_stemp, self.imass_stress_dat, self.stemp)
+                    self.solve_parloop(self.rhs_uh2, self.imass_velocity_dat, self.uh2)
+                    self.solve_parloop(self.rhs_u1, self.imass_velocity_dat, self.u1)
                 else:
                     with timed_region('velocity solve'):
                         solver_uh1.solve()
@@ -322,12 +397,18 @@ class ElasticLF4(object):
                 self.u0.assign(self.u1)
 
                 # Solve for the stress tensor field.
-                if self.explicit:
+                if self.solver == 'explicit':
                     with timed_region('stress solve'):
-                        self.solve(self.rhs_sh1, self.imass_stress, self.sh1)
-                        self.solve(self.rhs_utemp, self.imass_velocity, self.utemp)
-                        self.solve(self.rhs_sh2, self.imass_stress, self.sh2)
-                        self.solve(self.rhs_s1, self.imass_stress, self.s1)
+                        self.solve_petsc(self.rhs_sh1, self.imass_stress, self.sh1)
+                        self.solve_petsc(self.rhs_utemp, self.imass_velocity, self.utemp)
+                        self.solve_petsc(self.rhs_sh2, self.imass_stress, self.sh2)
+                        self.solve_petsc(self.rhs_s1, self.imass_stress, self.s1)
+                elif self.solver == 'parloop':
+                    with timed_region('stress solve'):
+                        self.solve_parloop(self.rhs_sh1, self.imass_stress_dat, self.sh1)
+                        self.solve_parloop(self.rhs_utemp, self.imass_velocity_dat, self.utemp)
+                        self.solve_parloop(self.rhs_sh2, self.imass_stress_dat, self.sh2)
+                        self.solve_parloop(self.rhs_s1, self.imass_stress_dat, self.s1)
                 else:
                     with timed_region('stress solve'):
                         solver_sh1.solve()

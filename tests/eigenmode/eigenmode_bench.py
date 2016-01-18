@@ -19,12 +19,12 @@ class EigenmodeBench(Benchmark):
     benchmark = 'EigenmodeLF4'
 
     def eigenmode(self, dim=3, N=3, degree=1, dt=0.125, T=2.0,
-                  explicit=True, opt=2):
+                  solver='explicit', opt=2):
         self.series['np'] = op2.MPI.comm.size
         self.series['dim'] = dim
         self.series['size'] = N
         self.series['T'] = T
-        self.series['explicit'] = explicit
+        self.series['solver'] = solver
         self.series['opt'] = opt
         self.series['degree'] = degree
 
@@ -38,10 +38,10 @@ class EigenmodeBench(Benchmark):
         parameters["coffee"]["O4"] = opt >= 4
 
         if dim == 2:
-            eigen = Eigenmode2DLF4(N, degree, dt, explicit=explicit, output=False)
+            eigen = Eigenmode2DLF4(N, degree, dt, solver=solver, output=False)
             u1, s1 = eigen.eigenmode2d(T=T)
         elif dim == 3:
-            eigen = Eigenmode3DLF4(N, degree, dt, explicit=explicit, output=False)
+            eigen = Eigenmode3DLF4(N, degree, dt, solver=solver, output=False)
             u1, s1 = eigen.eigenmode3d(T=T)
 
         for task, timer in get_timers(reset=True).items():
