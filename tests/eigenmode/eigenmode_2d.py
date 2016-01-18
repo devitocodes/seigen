@@ -20,8 +20,8 @@ class Eigenmode2DLF4():
       self.elastic.mu = 0.25
       self.elastic.l = 0.5
 
-      print "P-wave velocity: %f" % Vp(self.elastic.mu, self.elastic.l, self.elastic.density)
-      print "S-wave velocity: %f" % Vs(self.elastic.mu, self.elastic.density)
+      log("P-wave velocity: %f" % Vp(self.elastic.mu, self.elastic.l, self.elastic.density))
+      log("S-wave velocity: %f" % Vs(self.elastic.mu, self.elastic.density))
 
       self.a = sqrt(2)*pi*Vs(self.elastic.mu, self.elastic.density)
       self.b = 2*pi*self.elastic.mu
