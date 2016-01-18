@@ -1,4 +1,11 @@
 from math import *
+from pyop2 import op2
+
+def log(s):
+   """Internal logging method for parallel output to stdout"""
+   if op2.MPI.comm.rank == 0:
+      print s
+
 
 def Vp(mu, l, density):
    r""" Calculate the P-wave velocity, given by
