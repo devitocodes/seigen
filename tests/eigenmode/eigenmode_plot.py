@@ -157,7 +157,7 @@ if __name__ == '__main__':
                     transparent=True, bbox_inches='tight')
 
     elif args.mode == 'comparison':
-        # Bar comparison between explicit/implicit and coffe -O3 parameters
+        # Bar comparison between explicit/implicit and coffee -O3 parameters
         groups = ['explicit', 'opt']
         b.combine_series([('np', nprocs), ('dim', [dim]), ('size', args.size or [32]),
                           ('degree', degrees), ('dt', [0.125]), ('T', args.time or [2.0]),
