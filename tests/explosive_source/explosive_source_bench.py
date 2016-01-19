@@ -1,10 +1,11 @@
 from explosive_source_lf4 import ExplosiveSourceLF4
-from pybench import Benchmark, parser
+from pybench import Benchmark
 from pyop2.profiling import get_timers
 from firedrake import *
 
 parameters["pyop2_options"]["profiling"] = True
 parameters["pyop2_options"]["lazy_evaluation"] = False
+
 
 class ExplosiveSource(Benchmark, ExplosiveSourceLF4):
     warmups = 0

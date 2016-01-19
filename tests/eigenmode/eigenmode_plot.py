@@ -1,6 +1,7 @@
 from eigenmode_bench import EigenmodeBench
 from pybench import parser
 
+
 class EigenmodePlot(EigenmodeBench):
     figsize = (6, 4)
 
@@ -69,7 +70,7 @@ if __name__ == '__main__':
         import numpy as np
         import matplotlib.pyplot as plt
 
-        ## Hack to do an error-cost plot
+        # Hack to do an error-cost plot
         size = args.size or [32]
         keys = []
         stime = []
@@ -105,20 +106,20 @@ if __name__ == '__main__':
         u_err = np.array(u_err)
 
         for d in degrees:
-            d_keys = (keys[:,0] == d)
+            d_keys = (keys[:, 0] == d)
             d_utime = utime[d_keys]
             d_u_err = u_err[d_keys]
             d_dx = us_dx[d_keys]
             if len(d_utime) > 0:
-                ax.loglog(d_u_err, d_utime, label='P%d-DG'%d, linewidth=2,
+                ax.loglog(d_u_err, d_utime, label='P%d-DG' % d, linewidth=2,
                           linestyle='solid', marker=marker[d-1])
                 for x, y, dx in zip(d_u_err, d_utime, d_dx):
                     xy_off = (3, 3) if d < 4 else (-40, -6)
-                    plt.annotate("dx=%4.3f"%dx, xy=(x, y), xytext=xy_off,
+                    plt.annotate("dx=%4.3f" % dx, xy=(x, y), xytext=xy_off,
                                  textcoords='offset points', size=8)
 
         # Manually add legend and axis labels
-        l = ax.legend(loc='best', ncol=2, fancybox=True, prop={'size':12})
+        l = ax.legend(loc='best', ncol=2, fancybox=True, prop={'size': 12})
         ax.set_xlabel('Velocity error in L2 norm')
         ax.set_ylabel('Wall time / seconds')
 
@@ -134,20 +135,20 @@ if __name__ == '__main__':
         stime = np.array(stime)
         s_err = np.array(s_err)
         for d in degrees:
-            d_keys = (keys[:,0] == d)
+            d_keys = (keys[:, 0] == d)
             d_stime = stime[d_keys]
             d_s_err = s_err[d_keys]
             d_dx = us_dx[d_keys]
             if len(d_stime) > 0:
-                ax.loglog(d_s_err, d_stime, label='P%d-DG'%d, linewidth=2,
+                ax.loglog(d_s_err, d_stime, label='P%d-DG' % d, linewidth=2,
                           linestyle='solid', marker=marker[d-1])
                 for x, y, dx in zip(d_s_err, d_stime, d_dx):
                     xy_off = (3, 3) if d < 4 else (-40, -6)
-                    plt.annotate("dx=%4.3f"%dx, xy=(x, y), xytext=xy_off,
+                    plt.annotate("dx=%4.3f" % dx, xy=(x, y), xytext=xy_off,
                                  textcoords='offset points', size=8)
 
         # Manually add legend and axis labels
-        l = ax.legend(loc='best', ncol=2, fancybox=True, prop={'size':12})
+        l = ax.legend(loc='best', ncol=2, fancybox=True, prop={'size': 12})
         ax.set_xlabel('Stress error in L2 norm')
         ax.set_ylabel('Wall time / seconds')
 
@@ -166,7 +167,7 @@ if __name__ == '__main__':
 
         degree_str = ['P%s-DG' % d for d in degrees]
         for region in regions:
-            b.plot(figsize=b.figsize, format='pdf', figname='Eigen2DLF4_%s'%region,
+            b.plot(figsize=b.figsize, format='pdf', figname='Eigen2DLF4_%s' % region,
                    xaxis='degree', xvals=degrees, xticklabels=degree_str,
                    xlabel='Spatial discretisation', groups=groups, regions=[region],
-                   kinds='bar', title='Performance: %s'%region, labels=labels, legend={'loc': 'best'})
+                   kinds='bar', title='Performance: %s' % region, labels=labels, legend={'loc': 'best'})

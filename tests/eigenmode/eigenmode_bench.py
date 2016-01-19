@@ -1,6 +1,6 @@
 from eigenmode_2d import Eigenmode2DLF4
 from eigenmode_3d import Eigenmode3DLF4
-from pybench import Benchmark, parser
+from pybench import Benchmark
 from pyop2.profiling import get_timers
 from firedrake import *
 import mpi4py
@@ -9,6 +9,7 @@ parameters["pyop2_options"]["profiling"] = True
 parameters["pyop2_options"]["lazy_evaluation"] = False
 
 parameters["coffee"]["O2"] = True
+
 
 class EigenmodeBench(Benchmark):
     warmups = 1
