@@ -9,7 +9,7 @@ from pyop2.profiling import timed_region
 Lx = 4.0
 h = 1e-2
 with timed_region('mesh generation'):
-   mesh = IntervalMesh(int(Lx/h), Lx)
+    mesh = IntervalMesh(int(Lx/h), Lx)
 elastic = ElasticLF4(mesh, "DG", 1, dimension=1)
 
 # Constants

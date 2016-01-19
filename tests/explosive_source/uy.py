@@ -6,16 +6,16 @@ import vtktools
 plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
 
 def reference_data(i):
-   f = open("REF-C%d" % i, "r")
-   t = []
-   ux = []
-   uy = []
-   for line in f:
-      data = line.split()
-      t.append(float(data[0]))
-      ux.append(float(data[1]))
-      uy.append(float(data[2]))
-   return t, uy
+    f = open("REF-C%d" % i, "r")
+    t = []
+    ux = []
+    uy = []
+    for line in f:
+        data = line.split()
+        t.append(float(data[0]))
+        ux.append(float(data[1]))
+        uy.append(float(data[2]))
+    return t, uy
 
 Lx = 300.0
 h = 2.5
@@ -30,18 +30,18 @@ uy_c1 = []
 uy_c2 = []
 uy_c3 = []
 for i in range(0, int(T/dt), 5):
-   t.append(dt*i)
-   f = vtktools.vtu('velocity_%d.vtu' % i)
-   f.GetFieldNames()
+    t.append(dt*i)
+    f = vtktools.vtu('velocity_%d.vtu' % i)
+    f.GetFieldNames()
 
-   value = vtktools.vtu.ProbeData(f, numpy.array([[45.0, 149.0, 0]]), 'VelocityNew')
-   uy_c1.append(-value[0][1])
+    value = vtktools.vtu.ProbeData(f, numpy.array([[45.0, 149.0, 0]]), 'VelocityNew')
+    uy_c1.append(-value[0][1])
 
-   value = vtktools.vtu.ProbeData(f, numpy.array([[90.0, 149.0, 0]]), 'VelocityNew')
-   uy_c2.append(-value[0][1])
+    value = vtktools.vtu.ProbeData(f, numpy.array([[90.0, 149.0, 0]]), 'VelocityNew')
+    uy_c2.append(-value[0][1])
 
-   value = vtktools.vtu.ProbeData(f, numpy.array([[140.0, 149.0, 0]]), 'VelocityNew')
-   uy_c3.append(-value[0][1])
+    value = vtktools.vtu.ProbeData(f, numpy.array([[140.0, 149.0, 0]]), 'VelocityNew')
+    uy_c3.append(-value[0][1])
 
 fig = plt.figure(1)
 plt.plot(t, uy_c1, 'k--', label="Sensor C1")
