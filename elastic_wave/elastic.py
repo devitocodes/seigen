@@ -265,10 +265,10 @@ class ElasticLF4(object):
                 if(u):
                     self.u_stream << u
                 if(s):
-                   # FIXME: Cannot currently write tensor valued fields to a VTU file.
-                   # See https://github.com/firedrakeproject/firedrake/issues/538
-                   # self.s_stream << s
-                   pass
+                    # FIXME: Cannot currently write tensor valued fields to a VTU file.
+                    # See https://github.com/firedrakeproject/firedrake/issues/538
+                    # self.s_stream << s
+                    pass
 
     def run(self, T):
         """ Run the elastic wave simulation until t = T.
