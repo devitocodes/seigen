@@ -3,7 +3,10 @@ from pyop2 import op2
 
 
 def log(s):
-    """Internal logging method for parallel output to stdout"""
+    """Internal logging method for parallel output to stdout
+
+    :arg str s: The message to print.
+    """
     if op2.MPI.comm.rank == 0:
         print s
 
@@ -17,7 +20,7 @@ def Vp(mu, l, density):
 
     :param mu: The second Lame parameter.
     :param l: The first Lame parameter.
-    :param density: The density.
+    :param density: The density :math:`\rho`.
     :returns: The P-wave velocity.
     :rtype: float
     """
@@ -32,8 +35,8 @@ def Vs(mu, density):
     where :math:`\rho` is the density, and :math:`\lambda` and :math:`\mu` is the second Lame parameter.
 
     :param mu: The second Lame parameter.
-    :param density: The density.
-    :returns: The P-wave velocity.
+    :param density: The density :math:`\rho`.
+    :returns: The S-wave velocity.
     :rtype: float
     """
     return sqrt(mu/density)
