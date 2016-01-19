@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 
 from pyop2 import *
-from pyop2.profiling import timed_region, summary
+from pyop2.profiling import timed_region
 from pyop2.utils import cached_property
 op2.init(lazy_evaluation=False)
 from firedrake import *
 from elastic_wave.helpers import log
 import mpi4py
-import numpy
+
 
 class ElasticLF4(object):
     r""" An elastic wave equation solver, using the finite element method for spatial discretisation,
@@ -79,6 +79,7 @@ class ElasticLF4(object):
         where :math:`\mathbf{u}` is the velocity field.
         """
         return self.absorption_function
+
     @absorption.setter
     def absorption(self, expression):
         r""" Setter function for the absorption field.
@@ -91,6 +92,7 @@ class ElasticLF4(object):
     def source(self):
         r""" The source term on the RHS of the velocity (or stress) equation. """
         return self.source_function
+
     @source.setter
     def source(self, expression):
         r""" Setter function for the source field.
@@ -216,7 +218,7 @@ class ElasticLF4(object):
 
     def g(self, v, u1, I, n, l, mu, source=None):
         """ The RHS of the stress equation. """
-        g =  - l*(v[i,j]*I[i,j]).dx(k)*u1[k]*dx + l*(jump(v[i,j], n[k])*I[i,j]*avg(u1[k]))*dS + l*(v[i,j]*I[i,j]*u1[k]*n[k])*ds - mu*inner(div(v), u1)*dx + mu*inner(avg(u1), jump(v, n))*dS - mu*inner(div(v.T), u1)*dx + mu*inner(avg(u1), jump(v.T, n))*dS + mu*inner(u1, dot(v, n))*ds + mu*inner(u1, dot(v.T, n))*ds
+        g = - l*(v[i, j]*I[i, j]).dx(k)*u1[k]*dx + l*(jump(v[i, j], n[k])*I[i, j]*avg(u1[k]))*dS + l*(v[i, j]*I[i, j]*u1[k]*n[k])*ds - mu*inner(div(v), u1)*dx + mu*inner(avg(u1), jump(v, n))*dS - mu*inner(div(v.T), u1)*dx + mu*inner(avg(u1), jump(v.T, n))*dS + mu*inner(u1, dot(v, n))*ds + mu*inner(u1, dot(v.T, n))*ds
         if(source):
             g += inner(v, source)*dx
         return g
@@ -252,15 +254,15 @@ class ElasticLF4(object):
                 if(u):
                     self.u_stream << u
                 if(s):
-                    pass # FIXME: Cannot currently write tensor valued fields to a VTU file. See https://github.com/firedrakeproject/firedrake/issues/538
-                    #self.s_stream << s
+                    pass  # FIXME: Cannot currently write tensor valued fields to a VTU file. See https://github.com/firedrakeproject/firedrake/issues/538
+                    # self.s_stream << s
 
     def run(self, T):
         """ Run the elastic wave simulation until t = T.
         :param float T: The finish time of the simulation.
         :returns: The final solution fields for velocity and stress.
         """
-        self.write(self.u1, self.s1) # Write out the initial condition.
+        self.write(self.u1, self.s1)  # Write out the initial condition.
 
         if self.explicit:
             log("Generating inverse mass matrix")

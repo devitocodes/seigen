@@ -1,6 +1,7 @@
 from math import *
 from pyop2 import op2
 
+
 def log(s):
     """Internal logging method for parallel output to stdout"""
     if op2.MPI.comm.rank == 0:
@@ -22,6 +23,7 @@ def Vp(mu, l, density):
     """
     return sqrt((l + 2*mu)/density)
 
+
 def Vs(mu, density):
     r""" Calculate the S-wave velocity, given by
 
@@ -35,6 +37,7 @@ def Vs(mu, density):
     :rtype: float
     """
     return sqrt(mu/density)
+
 
 def cfl_dt(dx, Vp, courant_number):
     r""" Computes the maximum permitted value for the timestep math:`\delta t` with respect to the CFL condition.
