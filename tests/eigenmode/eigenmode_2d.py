@@ -31,8 +31,8 @@ class Eigenmode2DLF4():
         uic = Expression(('a*cos(pi*x[0])*sin(pi*x[1])*cos(a*t)',
                           '-a*sin(pi*x[0])*cos(pi*x[1])*cos(a*t)'), a=self.a, t=0)
         self.elastic.u0.assign(Function(self.elastic.U).interpolate(uic))
-        sic = Expression((('-b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)','0'),
-                          ('0','b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)')),
+        sic = Expression((('-b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)', '0'),
+                          ('0', 'b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)')),
                          a=self.a, b=self.b, t=self.elastic.dt/2.0)
         self.elastic.s0.assign(Function(self.elastic.S).interpolate(sic))
 
@@ -42,8 +42,8 @@ class Eigenmode2DLF4():
         uexact_e = Expression(('a*cos(pi*x[0])*sin(pi*x[1])*cos(a*t)',
                                '-a*sin(pi*x[0])*cos(pi*x[1])*cos(a*t)'), a=self.a, t=5)
         uexact = Function(self.elastic.U).interpolate(uexact_e)
-        sexact_e = Expression((('-b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)','0'),
-                               ('0','b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)')),
+        sexact_e = Expression((('-b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)', '0'),
+                               ('0', 'b*sin(pi*x[0])*sin(pi*x[1])*sin(a*t)')),
                               a=self.a, b=self.b, t=5+self.elastic.dt/2.0)
         sexact = Function(self.elastic.S).interpolate(sexact_e)
 
@@ -65,6 +65,7 @@ class Eigenmode2DLF4():
 
         return u_error, s_error
 
+
 def convergence_analysis():
     degrees = range(1, 5)
     N = [2**i for i in range(2, 6)]
@@ -72,7 +73,7 @@ def convergence_analysis():
     dx = [1.0/n for n in N]
 
     for d in degrees:
-        dt = [0.5*(1.0/n)/(2.0**(d-1)) for n in N] # Courant number of 0.5: (dx*C)/Vp
+        dt = [0.5*(1.0/n)/(2.0**(d-1)) for n in N]  # Courant number of 0.5: (dx*C)/Vp
 
         f = open("error_p%d_lf4.dat" % d, "w")
         f.write("dx\tdt\tu_error\ts_error\n")

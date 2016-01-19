@@ -31,7 +31,7 @@ class ExplosiveSourceLF4():
         self.dx = h
         self.courant_number = 0.5
         self.elastic.dt = cfl_dt(self.dx, self.Vp, self.courant_number)
-        print "Using a timestep of %f" % self.elastic.dt # This was previously hard-coded to be 0.001 s.
+        print "Using a timestep of %f" % self.elastic.dt  # This was previously hard-coded to be 0.001 s.
 
         # Source
         a = 159.42
@@ -48,8 +48,8 @@ class ExplosiveSourceLF4():
         # Initial conditions
         uic = Expression(('0.0', '0.0'))
         self.elastic.u0.assign(Function(self.elastic.U).interpolate(uic))
-        sic = Expression((('0','0'),
-                    ('0','0')))
+        sic = Expression((('0', '0'),
+                          ('0', '0')))
         self.elastic.s0.assign(Function(self.elastic.S).interpolate(sic))
 
         # Start the simulation

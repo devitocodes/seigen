@@ -1,9 +1,8 @@
-import os
 import numpy
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mtick
 import vtktools
-plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+plt.ticklabel_format(style='sci', axis='y', scilimits=(0, 0))
+
 
 def reference_data(i):
     f = open("REF-C%d" % i, "r")
@@ -56,7 +55,7 @@ plt.savefig("uy_c1.pdf")
 
 
 fig = plt.figure(2)
-plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+plt.ticklabel_format(style='sci', axis='y', scilimits=(0, 0))
 plt.plot(t, uy_c2, 'k--', label="Sensor C2")
 reference_t, reference_uy_c2 = reference_data(2)
 plt.plot(reference_t, reference_uy_c2, 'k-', label="Reference data")
@@ -69,7 +68,7 @@ plt.savefig("uy_c2.pdf")
 
 
 f = plt.figure(3)
-plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+plt.ticklabel_format(style='sci', axis='y', scilimits=(0, 0))
 plt.plot(t, uy_c3, 'k--', label="Sensor C3")
 reference_t, reference_uy_c3 = reference_data(3)
 plt.plot(reference_t, reference_uy_c3, 'k-', label="Reference data")

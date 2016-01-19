@@ -3,7 +3,6 @@
 from elastic_wave.elastic import *
 from elastic_wave.helpers import *
 from firedrake import *
-import numpy
 from pyop2.profiling import timed_region
 
 Lx = 4.0

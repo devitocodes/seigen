@@ -69,6 +69,7 @@ class Eigenmode3DLF4():
 
         return u_error, s_error
 
+
 def convergence_analysis():
     degrees = range(1, 4)
     N = [2**i for i in range(1, 4)]
