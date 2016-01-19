@@ -20,7 +20,9 @@ class ElasticLF4(object):
         :param str family: Specify whether CG or DG should be used.
         :param int degree: Use polynomial basis functions of this degree.
         :param int dimension: The spatial dimension of the problem (1, 2 or 3).
-        :param bool explicit: If False, use PETSc to solve for the solution fields. Otherwise, explicitly invert the mass matrix and perform a matrix-vector multiplication to get the solution.
+        :param bool explicit: If False, use PETSc to solve for the solution fields.
+                              Otherwise, explicitly invert the mass matrix and perform
+                              a matrix-vector multiplication to get the solution.
         :param bool output: If True, output the solution fields to a file.
         :returns: None
         """
@@ -151,9 +153,11 @@ class ElasticLF4(object):
         """ UFL for u1 equation. """
         if self.explicit:
             # Note that we have multiplied through by dt here.
-            F = self.density*inner(self.w, self.u)*dx - self.density*inner(self.w, self.u0)*dx - self.dt*inner(self.w, self.uh1)*dx - ((self.dt**3)/24.0)*inner(self.w, self.uh2)*dx
+            F = self.density*inner(self.w, self.u)*dx - self.density*inner(self.w, self.u0)*dx \
+                - self.dt*inner(self.w, self.uh1)*dx - ((self.dt**3)/24.0)*inner(self.w, self.uh2)*dx
         else:
-            F = self.density*inner(self.w, (self.u - self.u0)/self.dt)*dx - inner(self.w, self.uh1)*dx - ((self.dt**2)/24.0)*inner(self.w, self.uh2)*dx
+            F = self.density*inner(self.w, (self.u - self.u0)/self.dt)*dx - inner(self.w, self.uh1)*dx \
+                - ((self.dt**2)/24.0)*inner(self.w, self.uh2)*dx
         return F
 
     @cached_property
@@ -199,9 +203,13 @@ class ElasticLF4(object):
         """ UFL for s1 equation. """
         if self.explicit:
             # Note that we have multiplied through by dt here.
-            F = inner(self.v, self.s)*dx - inner(self.v, self.s0)*dx - self.dt*inner(self.v, self.sh1)*dx - ((self.dt**3)/24.0)*inner(self.v, self.sh2)*dx
+            F = inner(self.v, self.s)*dx - inner(self.v, self.s0)*dx \
+                - self.dt*inner(self.v, self.sh1)*dx \
+                - ((self.dt**3)/24.0)*inner(self.v, self.sh2)*dx
         else:
-            F = inner(self.v, (self.s - self.s0)/self.dt)*dx - inner(self.v, self.sh1)*dx - ((self.dt**2)/24.0)*inner(self.v, self.sh2)*dx
+            F = inner(self.v, (self.s - self.s0)/self.dt)*dx \
+                - inner(self.v, self.sh1)*dx \
+                - ((self.dt**2)/24.0)*inner(self.v, self.sh2)*dx
         return F
 
     @cached_property
@@ -218,7 +226,10 @@ class ElasticLF4(object):
 
     def g(self, v, u1, I, n, l, mu, source=None):
         """ The RHS of the stress equation. """
-        g = - l*(v[i, j]*I[i, j]).dx(k)*u1[k]*dx + l*(jump(v[i, j], n[k])*I[i, j]*avg(u1[k]))*dS + l*(v[i, j]*I[i, j]*u1[k]*n[k])*ds - mu*inner(div(v), u1)*dx + mu*inner(avg(u1), jump(v, n))*dS - mu*inner(div(v.T), u1)*dx + mu*inner(avg(u1), jump(v.T, n))*dS + mu*inner(u1, dot(v, n))*ds + mu*inner(u1, dot(v.T, n))*ds
+        g = - l*(v[i, j]*I[i, j]).dx(k)*u1[k]*dx + l*(jump(v[i, j], n[k])*I[i, j]*avg(u1[k]))*dS \
+            + l*(v[i, j]*I[i, j]*u1[k]*n[k])*ds - mu*inner(div(v), u1)*dx + mu*inner(avg(u1), jump(v, n))*dS \
+            - mu*inner(div(v.T), u1)*dx + mu*inner(avg(u1), jump(v.T, n))*dS \
+            + mu*inner(u1, dot(v, n))*ds + mu*inner(u1, dot(v.T, n))*ds
         if(source):
             g += inner(v, source)*dx
         return g
@@ -254,8 +265,10 @@ class ElasticLF4(object):
                 if(u):
                     self.u_stream << u
                 if(s):
-                    pass  # FIXME: Cannot currently write tensor valued fields to a VTU file. See https://github.com/firedrakeproject/firedrake/issues/538
-                    # self.s_stream << s
+                   # FIXME: Cannot currently write tensor valued fields to a VTU file.
+                   # See https://github.com/firedrakeproject/firedrake/issues/538
+                   # self.s_stream << s
+                   pass
 
     def run(self, T):
         """ Run the elastic wave simulation until t = T.
