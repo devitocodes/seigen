@@ -58,20 +58,22 @@ class ElasticLF4(object):
             self.mesh = mesh
             self.dimension = dimension
             self.solver = solver
-            self.explicit = solver in ['explicit', 'parloop', 'fusion']
+            self.explicit = solver in ['explicit', 'parloop', 'fusion', 'tile']
             self.output = output
 
             self.tile_size = 1000
             self.extra_halo = 0
             self.tiling_mode = 'hard'
-            if solver in ['fusion']:
+            if solver in ['fusion', 'tile']:
                 self.num_unroll = 1
                 s_depth = calculate_sdepth(self.num_solves,
                                            self.num_unroll,
                                            self.extra_halo)
                 self.mesh.topology.init(s_depth=s_depth)
                 # This is only to print out info related to tiling
-                slope(mesh, debug=True)
+                if solver == 'tile':
+                    slope(mesh, debug=True)
+                    self.tiling_mode = 'tile'
             else:
                 self.num_unroll = 0
 
@@ -388,7 +390,7 @@ class ElasticLF4(object):
             # constant throughout the simulation (assuming no mesh adaptivity).
             with timed_region('inverse mass matrix'):
                 self.assemble_inverse_mass()
-                if self.solver in ['parloop', 'fusion']:
+                if self.solver in ['parloop', 'fusion', 'tile']:
                     self.imass_velocity = self.matrix_to_dat(self.imass_velocity, self.U)
                     self.imass_stress = self.matrix_to_dat(self.imass_stress, self.S)
 
@@ -419,7 +421,7 @@ class ElasticLF4(object):
         # Set self.solve according to solver mode
         if self.solver == 'explicit':
             solve = self.solve_petsc
-        elif self.solver in ['parloop', 'fusion']:
+        elif self.solver in ['parloop', 'fusion', 'tile']:
             solve = self.solve_parloop
         else:
             solve = lambda ctx, imass, res: ctx.solve()
