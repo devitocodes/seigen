@@ -352,19 +352,40 @@ class ElasticLF4(object):
             with timed_region('inverse mass matrix'):
                 self.assemble_inverse_mass()
                 if self.solver == 'parloop':
-                    self.imass_velocity_dat = self.matrix_to_dat(self.imass_velocity, self.U)
-                    self.imass_stress_dat = self.matrix_to_dat(self.imass_stress, self.S)
+                    self.imass_velocity = self.matrix_to_dat(self.imass_velocity, self.U)
+                    self.imass_stress = self.matrix_to_dat(self.imass_stress, self.S)
+
+            # Set RHS as individual solver contexts
+            ctx_uh1 = self.rhs_uh1
+            ctx_stemp = self.rhs_stemp
+            ctx_uh2 = self.rhs_uh2
+            ctx_u1 = self.rhs_u1
+            ctx_sh1 = self.rhs_sh1
+            ctx_utemp = self.rhs_utemp
+            ctx_sh2 = self.rhs_sh2
+            ctx_s1 = self.rhs_s1
         else:
-            log("Creating solver contexts")
-            with timed_region('solver setup'):
-                solver_uh1 = self.create_solver(self.form_uh1, self.uh1)
-                solver_stemp = self.create_solver(self.form_stemp, self.stemp)
-                solver_uh2 = self.create_solver(self.form_uh2, self.uh2)
-                solver_u1 = self.create_solver(self.form_u1, self.u1)
-                solver_sh1 = self.create_solver(self.form_sh1, self.sh1)
-                solver_utemp = self.create_solver(self.form_utemp, self.utemp)
-                solver_sh2 = self.create_solver(self.form_sh2, self.sh2)
-                solver_s1 = self.create_solver(self.form_s1, self.s1)
+            self.imass_velocity = None
+            self.imass_stress = None
+
+            log("Creating ctx contexts")
+            with timed_region('ctx setup'):
+                ctx_uh1 = self.create_solver(self.form_uh1, self.uh1)
+                ctx_stemp = self.create_solver(self.form_stemp, self.stemp)
+                ctx_uh2 = self.create_solver(self.form_uh2, self.uh2)
+                ctx_u1 = self.create_solver(self.form_u1, self.u1)
+                ctx_sh1 = self.create_solver(self.form_sh1, self.sh1)
+                ctx_utemp = self.create_solver(self.form_utemp, self.utemp)
+                ctx_sh2 = self.create_solver(self.form_sh2, self.sh2)
+                ctx_s1 = self.create_solver(self.form_s1, self.s1)
+
+        # Set self.solve according to solver mode
+        if self.solver == 'explicit':
+            solve = self.solve_petsc
+        elif self.solver == 'parloop':
+            solve = self.solve_parloop
+        else:
+            solve = lambda ctx, imass, res: ctx.solve()
 
         with timed_region('timestepping'):
             t = self.dt
@@ -378,43 +399,19 @@ class ElasticLF4(object):
                         self.source = self.source_expression
 
                 # Solve for the velocity vector field.
-                if self.solver == 'explicit':
-                    self.solve_petsc(self.rhs_uh1, self.imass_velocity, self.uh1)
-                    self.solve_petsc(self.rhs_stemp, self.imass_stress, self.stemp)
-                    self.solve_petsc(self.rhs_uh2, self.imass_velocity, self.uh2)
-                    self.solve_petsc(self.rhs_u1, self.imass_velocity, self.u1)
-                elif self.solver == 'parloop':
-                    self.solve_parloop(self.rhs_uh1, self.imass_velocity_dat, self.uh1)
-                    self.solve_parloop(self.rhs_stemp, self.imass_stress_dat, self.stemp)
-                    self.solve_parloop(self.rhs_uh2, self.imass_velocity_dat, self.uh2)
-                    self.solve_parloop(self.rhs_u1, self.imass_velocity_dat, self.u1)
-                else:
-                    with timed_region('velocity solve'):
-                        solver_uh1.solve()
-                        solver_stemp.solve()
-                        solver_uh2.solve()
-                        solver_u1.solve()
+                with timed_region('velocity solve'):
+                    solve(ctx_uh1, self.imass_velocity, self.uh1)
+                    solve(ctx_stemp, self.imass_stress, self.stemp)
+                    solve(ctx_uh2, self.imass_velocity, self.uh2)
+                    solve(ctx_u1, self.imass_velocity, self.u1)
                 self.u0.assign(self.u1)
 
                 # Solve for the stress tensor field.
-                if self.solver == 'explicit':
-                    with timed_region('stress solve'):
-                        self.solve_petsc(self.rhs_sh1, self.imass_stress, self.sh1)
-                        self.solve_petsc(self.rhs_utemp, self.imass_velocity, self.utemp)
-                        self.solve_petsc(self.rhs_sh2, self.imass_stress, self.sh2)
-                        self.solve_petsc(self.rhs_s1, self.imass_stress, self.s1)
-                elif self.solver == 'parloop':
-                    with timed_region('stress solve'):
-                        self.solve_parloop(self.rhs_sh1, self.imass_stress_dat, self.sh1)
-                        self.solve_parloop(self.rhs_utemp, self.imass_velocity_dat, self.utemp)
-                        self.solve_parloop(self.rhs_sh2, self.imass_stress_dat, self.sh2)
-                        self.solve_parloop(self.rhs_s1, self.imass_stress_dat, self.s1)
-                else:
-                    with timed_region('stress solve'):
-                        solver_sh1.solve()
-                        solver_utemp.solve()
-                        solver_sh2.solve()
-                        solver_s1.solve()
+                with timed_region('stress solve'):
+                    solve(ctx_sh1, self.imass_stress, self.sh1)
+                    solve(ctx_utemp, self.imass_velocity, self.utemp)
+                    solve(ctx_sh2, self.imass_stress, self.sh2)
+                    solve(ctx_s1, self.imass_stress, self.s1)
                 self.s0.assign(self.s1)
 
                 # Write out the new fields
