@@ -3,7 +3,7 @@
 from pyop2 import *
 from pyop2.profiling import timed_region
 from pyop2.utils import cached_property
-op2.init(lazy_evaluation=False)
+from pyop2.base import _trace
 from firedrake import *
 from firedrake.petsc import PETSc
 from elastic_wave.helpers import log
@@ -328,6 +328,7 @@ class ElasticLF4(object):
         :param firedrake.Function s: The stress field.
         :returns: None
         """
+        _trace.evaluate_all()
         if self.output:
             with timed_region('i/o'):
                 if(u):
