@@ -77,8 +77,8 @@ class ElasticLF4(object):
             else:
                 self.num_unroll = 0
 
-            self.S = TensorFunctionSpace(mesh, family, degree)
-            self.U = VectorFunctionSpace(mesh, family, degree)
+            self.S = TensorFunctionSpace(mesh, family, degree, name='S')
+            self.U = VectorFunctionSpace(mesh, family, degree, name='U')
             # Assumes that the S and U function spaces are the same.
             dofs = op2.MPI.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
             log("Number of degrees of freedom: %d" % dofs)
