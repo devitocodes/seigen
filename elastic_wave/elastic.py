@@ -3,6 +3,7 @@
 from pyop2 import *
 from pyop2.profiling import timed_region
 from pyop2.utils import cached_property
+from pyop2.fusion import loop_chain
 from pyop2.base import _trace
 from firedrake import *
 from firedrake.petsc import PETSc
@@ -12,9 +13,30 @@ import numpy as np
 import coffee.base as ast
 
 
+def calculate_sdepth(num_solves, num_unroll, extra_halo):
+    """The sdepth is calculated through the following formula:
+
+        sdepth = 1 if sequential else 1 + num_solves*num_unroll + extra_halo
+
+    Where:
+
+    :arg num_solves: number of solves per loop chain iteration
+    :arg num_unroll: unroll factor for the loop chain
+    :arg extra_halo: to expose the nonexec region to the tiling engine
+    """
+    if MPI.parallel:
+        return 1 + num_solves*num_unroll + extra_halo
+    else:
+        return 1
+
+
 class ElasticLF4(object):
     r""" An elastic wave equation solver, using the finite element method for spatial discretisation,
     and a fourth-order leap-frog time-stepping scheme. """
+
+    # Constants
+    loop_chain_length = 28
+    num_solves = 8
 
     def __init__(self, mesh, family, degree, dimension, solver='explicit', output=True):
         r""" Initialise a new elastic wave simulation.
@@ -36,8 +58,22 @@ class ElasticLF4(object):
             self.mesh = mesh
             self.dimension = dimension
             self.solver = solver
-            self.explicit = solver in ['explicit', 'parloop']
+            self.explicit = solver in ['explicit', 'parloop', 'fusion']
             self.output = output
+
+            self.tile_size = 1000
+            self.extra_halo = 0
+            self.tiling_mode = 'hard'
+            if solver in ['fusion']:
+                self.num_unroll = 1
+                s_depth = calculate_sdepth(self.num_solves,
+                                           self.num_unroll,
+                                           self.extra_halo)
+                self.mesh.topology.init(s_depth=s_depth)
+                # This is only to print out info related to tiling
+                slope(mesh, debug=True)
+            else:
+                self.num_unroll = 0
 
             self.S = TensorFunctionSpace(mesh, family, degree)
             self.U = VectorFunctionSpace(mesh, family, degree)
@@ -352,7 +388,7 @@ class ElasticLF4(object):
             # constant throughout the simulation (assuming no mesh adaptivity).
             with timed_region('inverse mass matrix'):
                 self.assemble_inverse_mass()
-                if self.solver == 'parloop':
+                if self.solver in ['parloop', 'fusion']:
                     self.imass_velocity = self.matrix_to_dat(self.imass_velocity, self.U)
                     self.imass_stress = self.matrix_to_dat(self.imass_stress, self.S)
 
@@ -383,7 +419,7 @@ class ElasticLF4(object):
         # Set self.solve according to solver mode
         if self.solver == 'explicit':
             solve = self.solve_petsc
-        elif self.solver == 'parloop':
+        elif self.solver in ['parloop', 'fusion']:
             solve = self.solve_parloop
         else:
             solve = lambda ctx, imass, res: ctx.solve()
@@ -393,27 +429,30 @@ class ElasticLF4(object):
             while t <= T + 1e-12:
                 log("t = %f" % t)
 
-                # In case the source is time-dependent, update the time 't' here.
-                if(self.source):
-                    with timed_region('source term update'):
-                        self.source_expression.t = t
-                        self.source = self.source_expression
+                with loop_chain("main1", tile_size=self.tile_size, num_unroll=self.num_unroll,
+                                mode=self.tiling_mode, extra_halo=self.extra_halo,
+                                partitioning='chunk'):
+                    # In case the source is time-dependent, update the time 't' here.
+                    if(self.source):
+                        with timed_region('source term update'):
+                            self.source_expression.t = t
+                            self.source = self.source_expression
 
-                # Solve for the velocity vector field.
-                with timed_region('velocity solve'):
-                    solve(ctx_uh1, self.imass_velocity, self.uh1)
-                    solve(ctx_stemp, self.imass_stress, self.stemp)
-                    solve(ctx_uh2, self.imass_velocity, self.uh2)
-                    solve(ctx_u1, self.imass_velocity, self.u1)
-                self.u0.assign(self.u1)
+                    with timed_region('velocity solve'):
+                        # Solve for the velocity vector field.
+                        solve(ctx_uh1, self.imass_velocity, self.uh1)
+                        solve(ctx_stemp, self.imass_stress, self.stemp)
+                        solve(ctx_uh2, self.imass_velocity, self.uh2)
+                        solve(ctx_u1, self.imass_velocity, self.u1)
+                    self.u0.assign(self.u1)
 
-                # Solve for the stress tensor field.
-                with timed_region('stress solve'):
-                    solve(ctx_sh1, self.imass_stress, self.sh1)
-                    solve(ctx_utemp, self.imass_velocity, self.utemp)
-                    solve(ctx_sh2, self.imass_stress, self.sh2)
-                    solve(ctx_s1, self.imass_stress, self.s1)
-                self.s0.assign(self.s1)
+                    with timed_region('stress solve'):
+                        # Solve for the stress tensor field.
+                        solve(ctx_sh1, self.imass_stress, self.sh1)
+                        solve(ctx_utemp, self.imass_velocity, self.utemp)
+                        solve(ctx_sh2, self.imass_stress, self.sh2)
+                        solve(ctx_s1, self.imass_stress, self.s1)
+                    self.s0.assign(self.s1)
 
                 # Write out the new fields
                 self.write(self.u1, self.s1)
