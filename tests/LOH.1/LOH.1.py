@@ -6,7 +6,7 @@ from elastic_wave.helpers import *
 
 with timed_region('mesh setup'):
     mesh = Mesh("src/domain.msh")
-elastic = ElasticLF4(mesh, "DG", 1, dimension=3)
+elastic = ElasticLF4.create(mesh, "DG", 1, dimension=3)
 
 # Constants
 C = FunctionSpace(mesh, "CG", 1)

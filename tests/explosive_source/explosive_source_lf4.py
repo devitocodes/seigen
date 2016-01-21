@@ -15,8 +15,8 @@ class ExplosiveSourceLF4():
 
         with timed_region('mesh generation'):
             mesh = self.generate_mesh()
-            self.elastic = ElasticLF4(mesh, "DG", 2, dimension=2,
-                                      explicit=explicit, output=output)
+            self.elastic = ElasticLF4.create(mesh, "DG", 2, dimension=2,
+                                             explicit=explicit, output=output)
 
         # Constants
         self.elastic.density = 1.0

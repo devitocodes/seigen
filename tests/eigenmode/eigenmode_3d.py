@@ -11,8 +11,8 @@ class Eigenmode3DLF4():
         with timed_region('mesh generation'):
             self.mesh = UnitCubeMesh(N, N, N)
 
-        self.elastic = ElasticLF4(self.mesh, "DG", degree, dimension=3,
-                                  explicit=explicit, output=output)
+        self.elastic = ElasticLF4.create(self.mesh, "DG", degree, dimension=3,
+                                         explicit=explicit, output=output)
 
         # Constants
         self.elastic.density = 1.0
