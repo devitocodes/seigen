@@ -1,5 +1,5 @@
 from math import *
-from pyop2 import op2
+from pyop2 import op2, MPI
 
 
 def log(s):
@@ -51,3 +51,21 @@ def cfl_dt(dx, Vp, courant_number):
     :rtype: float
     """
     return (courant_number*dx)/Vp
+
+
+def calculate_sdepth(num_solves, num_unroll, extra_halo):
+    """Calculates the number of additional halo layers required for
+    fusion and tiling runs through the following formula:
+
+        sdepth = 1 if sequential else 1 + num_solves*num_unroll + extra_halo
+
+    Where:
+
+    :arg num_solves: number of solves per loop chain iteration
+    :arg num_unroll: unroll factor for the loop chain
+    :arg extra_halo: to expose the nonexec region to the tiling engine
+    """
+    if MPI.parallel:
+        return 1 + num_solves*num_unroll + extra_halo
+    else:
+        return 1
