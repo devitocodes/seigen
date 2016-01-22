@@ -255,6 +255,9 @@ class ElasticLF4(object):
 
     @property
     def loop_context(self):
+        r""" Empty context manager that is used as aplaceholder
+        instead of the PyOP2 context managers required for advanced
+        fusion/tiling modes."""
         @contextmanager
         def empty_loop_context():
             yield
@@ -382,14 +385,25 @@ class ExplicitElasticLF4(ElasticLF4):
 
 
 class TilingElasticLF4(ExplicitElasticLF4):
+    r""" Experimental elastic equation solver that uses explicit
+    solves for individual UFL forms and facilitates PyOP2-level loop
+    fusion and loop tiling via SLOPE. These advanced solver modes all
+    require a PyOP2 kernel to perform the multiplication of assembled
+    RHSs and the diagonal block entries of the inverse mass matrices,
+    which in turn allows us to fuse these into the main loops via
+    tiling.
+    """
 
-    # Tiling-specific constants
+    # Fusion/tiling-specific constants
     loop_chain_length = 28
     num_solves = 8
     tile_size = 1000
     extra_halo = 0
 
     def __init__(self, mesh, *args, **kwargs):
+        r""" Tiling and loop fusion require increased halos (s-depth),
+        which is currently done by explicitly calling
+        mesh.init(sdepth)."""
         self.tiling_mode = kwargs.pop("tiling_mode", None)
         self.num_unroll = 0 if self.tiling_mode is None else 1
         if self.tiling_mode is not None:
@@ -405,7 +419,7 @@ class TilingElasticLF4(ExplicitElasticLF4):
         self.asts = {}
 
     def calculate_sdepth(self, num_solves, num_unroll, extra_halo):
-        """The sdepth is calculated through the following formula:
+        r""" The sdepth for large halo regions is calculated as:
 
         sdepth = 1 if sequential else 1 + num_solves*num_unroll + extra_halo
 
@@ -421,7 +435,8 @@ class TilingElasticLF4(ExplicitElasticLF4):
             return 1
 
     def matrix_to_dat(self, massmatrix, functionspace):
-        # Copy the velocity mass matrix into a Dat
+        r""" Copy the clock diagonal entries of the velocity mass
+        matrix into a pyop2.Dat"""
         arity = sum(functionspace.topological.dofs_per_entity)*functionspace.topological.dim
         dat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
         istart, iend = massmatrix.handle.getOwnershipRange()
@@ -434,13 +449,17 @@ class TilingElasticLF4(ExplicitElasticLF4):
         return dat
 
     def setup(self, *args, **kwargs):
+        r""" After creating inverse mass matrices we extract diagonal
+        block entries into a pyop2.Dat."""
         super(TilingElasticLF4, self).setup(*args, **kwargs)
         # Convert inverse mass matrices to PyOP2 Dats
         self.invmass_velocity = self.matrix_to_dat(self.invmass_velocity, self.U)
         self.invmass_stress = self.matrix_to_dat(self.invmass_stress, self.S)
 
     def ast_matmul(self, F_a):
-        """Generate an AST for a PyOP2 kernel performing a matrix-vector multiplication."""
+        """Generate an AST for a PyOP2 kernel performing a matrix-vector multiplication.
+
+        :param F_a: Assembled firedrake.Function object for the RHS"""
 
         # The number of dofs on each element is /ndofs*cdim/
         F_a_fs = F_a.function_space()
@@ -468,7 +487,7 @@ class TilingElasticLF4(ExplicitElasticLF4):
 
         return fundecl
 
-    def solve(self, rhs, matrix_asdat, result):
+    def solve(self, rhs, matrix, result):
         r""" Solve by assembling RHS and applying inverse mass matrix using a PyOP2 Parloop.
         :param rhs: The RHS vector that the inverse mass matrix will be multiplied with.
         :param matrix: The inverse mass matrix.
@@ -479,13 +498,13 @@ class TilingElasticLF4(ExplicitElasticLF4):
 
         # Create the par loop (automatically added to the trace of loops to be executed)
         kernel = op2.Kernel(ast_matmul, ast_matmul.name)
-        op2.par_loop(kernel, self.mesh.cell_set,
-                     matrix_asdat(op2.READ),
+        op2.par_loop(kernel, self.mesh.cell_set, matrix(op2.READ),
                      F_a.dat(op2.READ, F_a.cell_node_map()),
                      result.dat(op2.WRITE, result.cell_node_map()))
 
     @property
     def loop_context(self):
+        r""" Inject pyop2.loop_chain context to facilitate fusion and tiling across kernels."""
         from pyop2.fusion import loop_chain
         @contextmanager
         def tiling_loop_context():
