@@ -10,6 +10,7 @@ import mpi4py
 from abc import ABCMeta, abstractmethod
 import numpy as np
 import coffee.base as ast
+from contextlib import contextmanager
 
 
 class ElasticLF4(object):
@@ -47,7 +48,14 @@ class ElasticLF4(object):
         elif solver == "explicit":
             return ExplicitElasticLF4(mesh, family, degree, dimension, output=output)
         elif solver == "parloop":
-            return ParloopElasticLF4(mesh, family, degree, dimension, output=output)
+            return TilingElasticLF4(mesh, family, degree, dimension,
+                                    output=output, tiling_mode=None)
+        elif solver == 'fusion':
+            return TilingElasticLF4(mesh, family, degree, dimension,
+                                    output=output, tiling_mode="hard")
+        elif solver == 'tiling':
+            return TilingElasticLF4(mesh, family, degree, dimension,
+                                    output=output, tiling_mode="tile")
         else:
             raise ValueError("Unknown solver mode. Must be one of: implicit, explicit, parloop")
 
@@ -245,6 +253,13 @@ class ElasticLF4(object):
             self.ctx_sh2 = self.create_solver(self.form_sh2, self.sh2)
             self.ctx_s1 = self.create_solver(self.form_s1, self.s1)
 
+    @property
+    def loop_context(self):
+        @contextmanager
+        def empty_loop_context():
+            yield
+        return empty_loop_context
+
     def run(self, T):
         """ Run the elastic wave simulation until t = T.
         :param float T: The finish time of the simulation.
@@ -261,27 +276,28 @@ class ElasticLF4(object):
             while t <= T + 1e-12:
                 log("t = %f" % t)
 
-                # In case the source is time-dependent, update the time 't' here.
-                if(self.source):
-                    with timed_region('source term update'):
-                        self.source_expression.t = t
-                        self.source = self.source_expression
+                with self.loop_context():
+                    # In case the source is time-dependent, update the time 't' here.
+                    if(self.source):
+                        with timed_region('source term update'):
+                            self.source_expression.t = t
+                            self.source = self.source_expression
 
-                # Solve for the velocity vector field.
-                with timed_region('velocity solve'):
-                    self.solve(self.ctx_uh1, self.invmass_velocity, self.uh1)
-                    self.solve(self.ctx_stemp, self.invmass_stress, self.stemp)
-                    self.solve(self.ctx_uh2, self.invmass_velocity, self.uh2)
-                    self.solve(self.ctx_u1, self.invmass_velocity, self.u1)
-                self.u0.assign(self.u1)
+                    # Solve for the velocity vector field.
+                    with timed_region('velocity solve'):
+                        self.solve(self.ctx_uh1, self.invmass_velocity, self.uh1)
+                        self.solve(self.ctx_stemp, self.invmass_stress, self.stemp)
+                        self.solve(self.ctx_uh2, self.invmass_velocity, self.uh2)
+                        self.solve(self.ctx_u1, self.invmass_velocity, self.u1)
+                    self.u0.assign(self.u1)
 
-                # Solve for the stress tensor field.
-                with timed_region('stress solve'):
-                    self.solve(self.ctx_sh1, self.invmass_stress, self.sh1)
-                    self.solve(self.ctx_utemp, self.invmass_velocity, self.utemp)
-                    self.solve(self.ctx_sh2, self.invmass_stress, self.sh2)
-                    self.solve(self.ctx_s1, self.invmass_stress, self.s1)
-                self.s0.assign(self.s1)
+                    # Solve for the stress tensor field.
+                    with timed_region('stress solve'):
+                        self.solve(self.ctx_sh1, self.invmass_stress, self.sh1)
+                        self.solve(self.ctx_utemp, self.invmass_velocity, self.utemp)
+                        self.solve(self.ctx_sh2, self.invmass_stress, self.sh2)
+                        self.solve(self.ctx_s1, self.invmass_stress, self.s1)
+                    self.s0.assign(self.s1)
 
                 # Execute the above scheduled Parloops
                 _trace.evaluate_all()
@@ -365,13 +381,44 @@ class ExplicitElasticLF4(ElasticLF4):
         super(ExplicitElasticLF4, self).setup()
 
 
-class ParloopElasticLF4(ExplicitElasticLF4):
+class TilingElasticLF4(ExplicitElasticLF4):
 
-    def __init__(self, *args, **kwargs):
-        super(ParloopElasticLF4, self).__init__(*args, **kwargs)
+    # Tiling-specific constants
+    loop_chain_length = 28
+    num_solves = 8
+    tile_size = 1000
+    extra_halo = 0
+
+    def __init__(self, mesh, *args, **kwargs):
+        self.tiling_mode = kwargs.pop("tiling_mode", None)
+        self.num_unroll = 0 if self.tiling_mode is None else 1
+        if self.tiling_mode is not None:
+            s_depth = self.calculate_sdepth(self.num_solves,
+                                            self.num_unroll,
+                                            self.extra_halo)
+            mesh.topology.init(s_depth=s_depth)
+        if self.tiling_mode == 'tile':
+            slope(mesh, debug=True)
+        super(TilingElasticLF4, self).__init__(mesh, *args, **kwargs)
 
         # AST cache
         self.asts = {}
+
+    def calculate_sdepth(self, num_solves, num_unroll, extra_halo):
+        """The sdepth is calculated through the following formula:
+
+        sdepth = 1 if sequential else 1 + num_solves*num_unroll + extra_halo
+
+        Where:
+
+        :arg num_solves: number of solves per loop chain iteration
+        :arg num_unroll: unroll factor for the loop chain
+        :arg extra_halo: to expose the nonexec region to the tiling engine
+        """
+        if MPI.parallel:
+            return 1 + num_solves*num_unroll + extra_halo
+        else:
+            return 1
 
     def matrix_to_dat(self, massmatrix, functionspace):
         # Copy the velocity mass matrix into a Dat
@@ -387,7 +434,7 @@ class ParloopElasticLF4(ExplicitElasticLF4):
         return dat
 
     def setup(self, *args, **kwargs):
-        super(ParloopElasticLF4, self).setup(*args, **kwargs)
+        super(TilingElasticLF4, self).setup(*args, **kwargs)
         # Convert inverse mass matrices to PyOP2 Dats
         self.invmass_velocity = self.matrix_to_dat(self.invmass_velocity, self.U)
         self.invmass_stress = self.matrix_to_dat(self.invmass_stress, self.S)
@@ -436,3 +483,13 @@ class ParloopElasticLF4(ExplicitElasticLF4):
                      matrix_asdat(op2.READ),
                      F_a.dat(op2.READ, F_a.cell_node_map()),
                      result.dat(op2.WRITE, result.cell_node_map()))
+
+    @property
+    def loop_context(self):
+        from pyop2.fusion import loop_chain
+        @contextmanager
+        def tiling_loop_context():
+            with loop_chain("main1", tile_size=self.tile_size, num_unroll=self.num_unroll,
+                            mode=self.tiling_mode, extra_halo=self.extra_halo, partitioning='chunk'):
+                yield
+        return tiling_loop_context
