@@ -4,9 +4,12 @@ from pyop2 import *
 from pyop2.profiling import timed_region
 op2.init(lazy_evaluation=False)
 from firedrake import *
+from firedrake.petsc import PETSc
 from elastic_wave.helpers import log
 import mpi4py
 from abc import ABCMeta, abstractmethod
+import numpy as np
+import coffee.base as ast
 
 
 class ElasticLF4(object):
@@ -21,7 +24,7 @@ class ElasticLF4(object):
     __metaclass__ = ABCMeta
 
     @staticmethod
-    def create(mesh, family, degree, dimension, explicit=True, output=True):
+    def create(mesh, family, degree, dimension, solver="explicit", output=True):
         r""" Create an elastic wave equation solver for the given mesh
         according to specified spatial discretisation details and
         solver methods.
@@ -29,19 +32,26 @@ class ElasticLF4(object):
         :param mesh: The underlying computational mesh of vertices and edges.
         :param str family: Specify whether CG or DG should be used.
         :param int degree: Use polynomial basis functions of this degree.
-        :bool explicit: If False, use PETSc to solve for the solution fields.
-                        Otherwise, explicitly invert the mass matrix and perform
-                        a matrix-vector multiplication to get the solution..
+        :param str solver: Solver mode, recognised values are:
+            'implicit': Use PETSc KSP solver to solve for the solution fields.
+            'explicit': Explicitly invert the mass matrix and perform a
+                        matrix-vector multiplication using PETSc MatMult.
+            'parloop': Explicitly invert the mass matrix and perform a
+                       matrix-vector multiplication using a PyOP2 Parloop.
         :param int dimension: The spatial dimension of the problem (1, 2 or 3).
         :param bool output: If True, output the solution fields to a file.
         :returns: None
         """
-        if explicit:
-            return ExplicitElasticLF4(mesh, family, degree, dimension, output=output)
-        else:
+        if solver == "implicit":
             return ImplicitElasticLF4(mesh, family, degree, dimension, output=output)
+        elif solver == "explicit":
+            return ExplicitElasticLF4(mesh, family, degree, dimension, output=output)
+        elif solver == "parloop":
+            return ParloopElasticLF4(mesh, family, degree, dimension, output=output)
+        else:
+            raise ValueError("Unknown solver mode. Must be one of: implicit, explicit, parloop")
 
-    def __init__(self, mesh, family, degree, dimension, explicit=True, output=True):
+    def __init__(self, mesh, family, degree, dimension, output=True):
         r""" Initialise a new elastic wave simulation.
 
         :param mesh: The underlying computational mesh of vertices and edges.
@@ -349,3 +359,76 @@ class ExplicitElasticLF4(ElasticLF4):
 
         # Setup RHS assembly objects
         super(ExplicitElasticLF4, self).setup()
+
+
+class ParloopElasticLF4(ExplicitElasticLF4):
+
+    def __init__(self, *args, **kwargs):
+        super(ParloopElasticLF4, self).__init__(*args, **kwargs)
+
+        # AST cache
+        self.asts = {}
+
+    def matrix_to_dat(self, massmatrix, functionspace):
+        # Copy the velocity mass matrix into a Dat
+        arity = sum(functionspace.topological.dofs_per_entity)*functionspace.topological.dim
+        dat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
+        istart, iend = massmatrix.handle.getOwnershipRange()
+        idxs = [PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
+                                         comm=PETSc.COMM_SELF)
+                for i in range(istart, iend, arity)]
+        submats = massmatrix.handle.getSubMatrices(idxs, idxs)
+        for i, m in enumerate(submats):
+            dat.data[i] = m[:, :].flatten()
+        return dat
+
+    def setup(self, *args, **kwargs):
+        super(ParloopElasticLF4, self).setup(*args, **kwargs)
+        # Convert inverse mass matrices to PyOP2 Dats
+        self.invmass_velocity = self.matrix_to_dat(self.invmass_velocity, self.U)
+        self.invmass_stress = self.matrix_to_dat(self.invmass_stress, self.S)
+
+    def ast_matmul(self, F_a):
+        """Generate an AST for a PyOP2 kernel performing a matrix-vector multiplication."""
+
+        # The number of dofs on each element is /ndofs*cdim/
+        F_a_fs = F_a.function_space()
+        ndofs = sum(F_a_fs.topological.dofs_per_entity)
+        cdim = F_a_fs.dim
+        name = 'mat_vec_mul_kernel_%s' % F_a_fs.name
+
+        identifier = (ndofs, cdim, name)
+        if identifier in self.asts:
+            return self.asts[identifier]
+
+        # Craft the AST
+        body = ast.Incr(ast.Symbol('C', ('i/%d' % cdim, 'i%%%d' % cdim)),
+                        ast.Prod(ast.Symbol('A', ('i',), ((ndofs*cdim, 'j*%d + k' % cdim),)),
+                                 ast.Symbol('B', ('j', 'k'))))
+        body = ast.c_for('k', cdim, body).children[0]
+        body = [ast.Assign(ast.Symbol('C', ('i/%d' % cdim, 'i%%%d' % cdim)), '0.0'),
+                ast.c_for('j', ndofs, body).children[0]]
+        body = ast.Root([ast.c_for('i', ndofs*cdim, body).children[0]])
+        funargs = [ast.Decl('double*', 'A'), ast.Decl('double**', 'B'), ast.Decl('double**', 'C')]
+        fundecl = ast.FunDecl('void', name, funargs, body, ['static', 'inline'])
+
+        # Track the AST for later fast retrieval
+        self.asts[identifier] = fundecl
+
+        return fundecl
+
+    def solve(self, rhs, matrix_asdat, result):
+        r""" Solve by assembling RHS and applying inverse mass matrix using a PyOP2 Parloop.
+        :param rhs: The RHS vector that the inverse mass matrix will be multiplied with.
+        :param matrix: The inverse mass matrix.
+        :param firedrake.Function result: The solution field.
+        :returns: None"""
+        F_a = assemble(rhs)
+        ast_matmul = self.ast_matmul(F_a)
+
+        # Create the par loop (automatically added to the trace of loops to be executed)
+        kernel = op2.Kernel(ast_matmul, ast_matmul.name)
+        op2.par_loop(kernel, self.mesh.cell_set,
+                     matrix_asdat(op2.READ),
+                     F_a.dat(op2.READ, F_a.cell_node_map()),
+                     result.dat(op2.WRITE, result.cell_node_map()))
