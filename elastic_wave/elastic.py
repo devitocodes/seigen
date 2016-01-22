@@ -2,7 +2,7 @@
 
 from pyop2 import *
 from pyop2.profiling import timed_region
-op2.init(lazy_evaluation=False)
+from pyop2.base import _trace
 from firedrake import *
 from firedrake.petsc import PETSc
 from elastic_wave.helpers import log
@@ -281,6 +281,9 @@ class ElasticLF4(object):
                     self.solve(self.ctx_sh2, self.invmass_stress, self.sh2)
                     self.solve(self.ctx_s1, self.invmass_stress, self.s1)
                 self.s0.assign(self.s1)
+
+                # Execute the above scheduled Parloops
+                _trace.evaluate_all()
 
                 # Write out the new fields
                 self.write(self.u1, self.s1)

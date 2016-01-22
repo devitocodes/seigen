@@ -6,8 +6,6 @@ from firedrake import *
 import mpi4py
 
 parameters["pyop2_options"]["profiling"] = True
-parameters["pyop2_options"]["lazy_evaluation"] = False
-
 parameters["coffee"]["O2"] = True
 
 
