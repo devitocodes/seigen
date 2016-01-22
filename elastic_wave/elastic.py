@@ -39,6 +39,10 @@ class ElasticLF4(object):
                         matrix-vector multiplication using PETSc MatMult.
             'parloop': Explicitly invert the mass matrix and perform a
                        matrix-vector multiplication using a PyOP2 Parloop.
+            'fusion': Experimental mode that enables PyOP2 kernel fusion
+                      to fuse cell and facet loops.
+            'tiling': Experimental mode that activates loop tiling via
+                      PyOP2 and SLOPE.
         :param int dimension: The spatial dimension of the problem (1, 2 or 3).
         :param bool output: If True, output the solution fields to a file.
         :returns: None
@@ -255,7 +259,7 @@ class ElasticLF4(object):
 
     @property
     def loop_context(self):
-        r""" Empty context manager that is used as aplaceholder
+        r""" Empty context manager that is used as a placeholder
         instead of the PyOP2 context managers required for advanced
         fusion/tiling modes."""
         @contextmanager
