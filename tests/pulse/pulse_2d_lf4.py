@@ -10,7 +10,7 @@ Ly = 1.0
 h = 1e-2
 with timed_region('mesh generation'):
     mesh = RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
-elastic = ElasticLF4(mesh, "DG", 1, dimension=1)
+elastic = ElasticLF4.create(mesh, "DG", 1, dimension=1)
 
 # Constants
 elastic.density = 1.0

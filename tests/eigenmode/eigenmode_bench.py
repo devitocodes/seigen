@@ -6,8 +6,6 @@ from firedrake import *
 import mpi4py
 
 parameters["pyop2_options"]["profiling"] = True
-parameters["pyop2_options"]["lazy_evaluation"] = False
-
 parameters["coffee"]["O2"] = True
 
 
@@ -19,12 +17,12 @@ class EigenmodeBench(Benchmark):
     benchmark = 'EigenmodeLF4'
 
     def eigenmode(self, dim=3, N=3, degree=1, dt=0.125, T=2.0,
-                  explicit=True, opt=2):
+                  solver='explicit', opt=2):
         self.series['np'] = op2.MPI.comm.size
         self.series['dim'] = dim
         self.series['size'] = N
         self.series['T'] = T
-        self.series['explicit'] = explicit
+        self.series['solver'] = solver
         self.series['opt'] = opt
         self.series['degree'] = degree
 
@@ -38,10 +36,10 @@ class EigenmodeBench(Benchmark):
         parameters["coffee"]["O4"] = opt >= 4
 
         if dim == 2:
-            eigen = Eigenmode2DLF4(N, degree, dt, explicit=explicit, output=False)
+            eigen = Eigenmode2DLF4(N, degree, dt, solver=solver, output=False)
             u1, s1 = eigen.eigenmode2d(T=T)
         elif dim == 3:
-            eigen = Eigenmode3DLF4(N, degree, dt, explicit=explicit, output=False)
+            eigen = Eigenmode3DLF4(N, degree, dt, solver=solver, output=False)
             u1, s1 = eigen.eigenmode3d(T=T)
 
         for task, timer in get_timers(reset=True).items():
@@ -49,9 +47,10 @@ class EigenmodeBench(Benchmark):
 
         self.meta['dofs'] = op2.MPI.comm.allreduce(eigen.elastic.S.dof_count, op=mpi4py.MPI.SUM)
         try:
-            u_error, s_error = eigen.eigenmode_error(u1, s1)
-            self.meta['u_error'] = u_error
-            self.meta['s_error'] = s_error
+            with self.timed_region('compute_error'):
+                u_error, s_error = eigen.eigenmode_error(u1, s1)
+                self.meta['u_error'] = u_error
+                self.meta['s_error'] = s_error
         except RuntimeError:
             print "WARNING: Couldn't establish error norm"
             self.meta['u_error'] = 'NaN'

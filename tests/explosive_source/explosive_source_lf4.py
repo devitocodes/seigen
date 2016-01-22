@@ -11,12 +11,12 @@ class ExplosiveSourceLF4():
         return RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
 
     def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5,
-                             explicit=True, output=True):
+                             solver="explicit", output=True):
 
         with timed_region('mesh generation'):
             mesh = self.generate_mesh()
-            self.elastic = ElasticLF4(mesh, "DG", 2, dimension=2,
-                                      explicit=explicit, output=output)
+            self.elastic = ElasticLF4.create(mesh, "DG", 2, dimension=2,
+                                             explicit=explicit, output=output)
 
         # Constants
         self.elastic.density = 1.0
