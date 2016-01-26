@@ -84,6 +84,7 @@ class ElasticLF4(object):
             self.tiling_mode = tiling['mode']
             self.tiling_halo = tiling['extra_halo']
             self.tiling_part = tiling['partitioning']
+            self.tiling_split = tiling['split_mode']
 
             # AST cache
             self.asts = {}
@@ -344,7 +345,7 @@ class ElasticLF4(object):
                     print "t = %f, (timestep = %d)" % (t, timestep)
                 with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf,
                                 mode=self.tiling_mode, extra_halo=self.tiling_halo,
-                                partitioning=self.tiling_part):
+                                partitioning=self.tiling_part, split_mode=self.tiling_split):
                     # In case the source is time-dependent, update the time 't' here.
                     if(self.source):
                         with timed_region('source term update'):
@@ -437,6 +438,7 @@ class ExplosiveSourceLF4():
         num_unroll = tiling['num_unroll']
         extra_halo = tiling['extra_halo']
         part_mode = tiling['partitioning']
+        split_mode = tiling['split_mode']
 
         with timed_region('mesh generation'):
             mesh = self.generate_mesh(Lx, Ly, h, num_unroll, extra_halo)
@@ -487,7 +489,8 @@ class ExplosiveSourceLF4():
                     nloops=ElasticLF4.loop_chain_length * num_unroll,
                     partitioning=part_mode,
                     tile_size=tile_size,
-                    extra_halo=extra_halo)
+                    extra_halo=extra_halo,
+                    split_mode=split_mode)
 
         return u1, s1
 
@@ -511,7 +514,8 @@ if __name__ == '__main__':
         'tile_size': args.tile_size,
         'mode': args.fusion_mode,
         'partitioning': args.part_mode,
-        'extra_halo': args.extra_halo
+        'extra_halo': args.extra_halo,
+        'split_mode': args.split_mode
     }
 
     # Simulation constants
