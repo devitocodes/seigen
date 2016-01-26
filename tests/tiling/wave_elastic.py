@@ -464,7 +464,7 @@ class ExplosiveSourceLF4():
         # Source
         a = 159.42
         self.elastic.source_expression = Expression((("x[0] >= 44.5 && x[0] <= 45.5 && x[1] >= %f && x[1] <= %f ? (-1.0 + 2*a*pow(t - 0.3, 2))*exp(-a*pow(t - 0.3, 2)) : 0.0" % (Ly - 1.5, Ly - 0.5), "0.0"),
-                                                     ("0.0", "x[0] >= 44.5 && x[0] <= 45.5 && x[1] >= 148.5 && x[1] <= 149.5 ? (-1.0 + 2*a*pow(t - 0.3, 2))*exp(-a*pow(t - 0.3, 2)) : 0.0")), a=a, t=0)
+                                                     ("0.0", "x[0] >= 44.5 && x[0] <= 45.5 && x[1] >= %f && x[1] <= %f ? (-1.0 + 2*a*pow(t - 0.3, 2))*exp(-a*pow(t - 0.3, 2)) : 0.0" % (Ly - 1.5, Ly - 0.5))), a=a, t=0)
         self.elastic.source_function = Function(self.elastic.S)
         self.elastic.source = self.elastic.source_expression
 
