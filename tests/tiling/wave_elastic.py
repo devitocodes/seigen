@@ -426,9 +426,12 @@ def cfl_dt(dx, Vp, courant_number):
 
 class ExplosiveSourceLF4():
 
-    def generate_mesh(self, Lx=300.0, Ly=150.0, h=2.5, num_unroll=1, extra_halo=0):
+    def generate_mesh(self, Lx=300.0, Ly=150.0, h=2.5, num_unroll=1, extra_halo=0, split_mode=0):
         mesh = RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
-        mesh.topology.init(s_depth=calculate_sdepth(ElasticLF4.num_solves, num_unroll, extra_halo))
+        num_solves = ElasticLF4.num_solves
+        if split_mode > 0 and split_mode < num_solves:
+            num_solves = split_mode
+        mesh.topology.init(s_depth=calculate_sdepth(num_solves, num_unroll, extra_halo))
         # This is only to print out info related to tiling
         slope(mesh, debug=True)
         return mesh
@@ -443,7 +446,7 @@ class ExplosiveSourceLF4():
         split_mode = tiling['split_mode']
 
         with timed_region('mesh generation'):
-            mesh = self.generate_mesh(Lx, Ly, h, num_unroll, extra_halo)
+            mesh = self.generate_mesh(Lx, Ly, h, num_unroll, extra_halo, split_mode)
             self.elastic = ElasticLF4(mesh, "DG", 2, dimension=2, output=output, tiling=tiling)
 
         # Constants
