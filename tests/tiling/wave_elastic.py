@@ -5,7 +5,7 @@ from pyop2.utils import cached_property
 from pyop2.profiling import timed_region
 from pyop2.base import _trace, Dat, DataSet
 from pyop2.configuration import configuration
-from pyop2.fusion import loop_chain
+from pyop2.fusion import loop_chain, loop_chain_tag
 
 import coffee.base as ast
 
@@ -295,6 +295,7 @@ class ElasticLF4(object):
 
         return fundecl
 
+    @loop_chain_tag
     def solve(self, rhs, matrix_asdat, result):
         F_a = assemble(rhs)
         ast_matmul = self.ast_matmul(F_a)
@@ -339,7 +340,8 @@ class ElasticLF4(object):
             t = self.dt
             timestep = 0
             while t <= T + 1e-12:
-                print "t = %f" % t
+                if timestep % self.output == 0:
+                    print "t = %f, (timestep = %d)" % (t, timestep)
                 with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf,
                                 mode=self.tiling_mode, extra_halo=self.tiling_halo,
                                 partitioning=self.tiling_part):
