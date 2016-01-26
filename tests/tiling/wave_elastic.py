@@ -85,6 +85,7 @@ class ElasticLF4(object):
             self.tiling_halo = tiling['extra_halo']
             self.tiling_part = tiling['partitioning']
             self.tiling_split = tiling['split_mode']
+            self.tiling_log = tiling['log']
 
             # AST cache
             self.asts = {}
@@ -345,7 +346,8 @@ class ElasticLF4(object):
                     print "t = %f, (timestep = %d)" % (t, timestep)
                 with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf,
                                 mode=self.tiling_mode, extra_halo=self.tiling_halo,
-                                partitioning=self.tiling_part, split_mode=self.tiling_split):
+                                partitioning=self.tiling_part, split_mode=self.tiling_split,
+                                log=self.tiling_log):
                     # In case the source is time-dependent, update the time 't' here.
                     if(self.source):
                         with timed_region('source term update'):
@@ -515,7 +517,8 @@ if __name__ == '__main__':
         'mode': args.fusion_mode,
         'partitioning': args.part_mode,
         'extra_halo': args.extra_halo,
-        'split_mode': args.split_mode
+        'split_mode': args.split_mode,
+        'log': args.log
     }
 
     # Simulation constants
