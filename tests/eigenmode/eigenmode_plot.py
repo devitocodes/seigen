@@ -5,13 +5,13 @@ from pybench import parser
 class EigenmodePlot(EigenmodeBench):
     figsize = (6, 4)
 
-    def plot_strong_scaling(self, nprocs, dim, size, degrees, dt, time, explicit, opt):
+    def plot_strong_scaling(self, nprocs, dim, size, degrees, dt, time, solver, opt):
         b.combine_series([('np', nprocs), ('dim', dim), ('size', size),
                           ('degree', degrees), ('dt', dt), ('T', time),
-                          ('explicit', args.explicit), ('opt', args.opt)],
+                          ('solver', solver), ('opt', opt)],
                          filename='EigenmodeLF4')
 
-        groups = ['explicit', 'opt']
+        groups = ['solver', 'opt']
         xlabel = 'Number of processors'
 
         # Plot classic strong scaling plot
@@ -43,8 +43,8 @@ if __name__ == '__main__':
                    help='polynomial degrees to plot')
     p.add_argument('-T', '--time', type=float, nargs='+', default=[2.0],
                    help='total simulated time')
-    p.add_argument('--explicit', nargs='+', default=[True],
-                   help='Explicit solver method used (True or False)')
+    p.add_argument('--solver', nargs='+', default=['explicit'],
+                   help='Solver method used ("implicit", "explicit")')
     p.add_argument('--opt', type=int, nargs='+', default=[3],
                    help='Coffee optimisation levels used')
     args = p.parse_args()
@@ -52,10 +52,10 @@ if __name__ == '__main__':
     degrees = args.degree or [1, 2, 3, 4]
     nprocs = args.parallel or [1]
     regions = ['stress solve', 'velocity solve', 'timestepping']
-    labels = {(2, False): 'Implicit',
-              (2, True): 'Explicit',
-              (3, True): 'Explicit, zero-tracking',
-              (4, True): 'Explicit, coffee-O4'}
+    labels = {(2, 'implicit'): 'Implicit',
+              (2, 'explicit'): 'Explicit',
+              (3, 'explicit'): 'Explicit, zero-tracking',
+              (4, 'explicit'): 'Explicit, coffee-O4'}
 
     b = EigenmodePlot(benchmark='Eigenmode2D-Performance',
                       resultsdir=args.resultsdir, plotdir=args.plotdir)
@@ -63,7 +63,7 @@ if __name__ == '__main__':
     if args.mode == 'strong':
         b.plot_strong_scaling(nprocs=nprocs, dim=[args.dim], size=args.size,
                               degrees=degrees, dt=[0.125], time=args.time,
-                              explicit=args.explicit, opt=args.opt)
+                              solver=args.solver, opt=args.opt)
 
     if args.mode == 'error':
         from itertools import product
@@ -159,10 +159,10 @@ if __name__ == '__main__':
 
     elif args.mode == 'comparison':
         # Bar comparison between explicit/implicit and coffee -O3 parameters
-        groups = ['explicit', 'opt']
+        groups = ['solver', 'opt']
         b.combine_series([('np', nprocs), ('dim', [dim]), ('size', args.size or [32]),
                           ('degree', degrees), ('dt', [0.125]), ('T', args.time or [2.0]),
-                          ('explicit', [False, True]), ('opt', [2, 3, 4])],
+                          ('solver', args.solver), ('opt', args.opt)],
                          filename='EigenmodeLF4')
 
         degree_str = ['P%s-DG' % d for d in degrees]
