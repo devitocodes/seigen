@@ -46,15 +46,15 @@ class EigenmodeBench(Benchmark):
             self.register_timing(task, timer.total)
 
         self.meta['dofs'] = op2.MPI.comm.allreduce(eigen.elastic.S.dof_count, op=mpi4py.MPI.SUM)
-        try:
-            with self.timed_region('compute_error'):
+        if 'u_error' not in self.meta:
+            try:
                 u_error, s_error = eigen.eigenmode_error(u1, s1)
                 self.meta['u_error'] = u_error
                 self.meta['s_error'] = s_error
-        except RuntimeError:
-            print "WARNING: Couldn't establish error norm"
-            self.meta['u_error'] = 'NaN'
-            self.meta['s_error'] = 'NaN'
+            except RuntimeError:
+                print "WARNING: Couldn't establish error norm"
+                self.meta['u_error'] = 'NaN'
+                self.meta['s_error'] = 'NaN'
 
 
 if __name__ == '__main__':
