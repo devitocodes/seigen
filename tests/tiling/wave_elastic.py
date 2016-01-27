@@ -179,7 +179,7 @@ class ElasticLF4(object):
 
         # Copy the velocity mass matrix into a Dat
         vmat = self.imass_velocity.handle
-        arity = sum(self.U.topological.dofs_per_entity)*self.U.topological.dim
+        arity = sum(self.U._dofs_per_entity)*self.U.cdim
         self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
         U_filename = os.path.join(filename, 'U', 'p%d' % self.degree, 'totdofs%d' % self.U_tot_dofs,
                                   "ndofs%d_rank%d" % (self.U.dof_count, op2.MPI.comm.rank))
@@ -212,7 +212,7 @@ class ElasticLF4(object):
 
         # Copy the stress mass matrix into a Dat
         smat = self.imass_stress.handle
-        arity = sum(self.S.topological.dofs_per_entity)*self.S.topological.dim
+        arity = sum(self.S._dofs_per_entity)*self.S.cdim
         self.stress_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
         S_filename = os.path.join(filename, 'S', 'p%d' % self.degree, 'totdofs%d' % self.S_tot_dofs,
                                   "ndofs%d_rank%d" % (self.S.dof_count, op2.MPI.comm.rank))
