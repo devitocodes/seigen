@@ -5,29 +5,35 @@ from pybench import parser
 class EigenmodePlot(EigenmodeBench):
     figsize = (6, 4)
 
-    def plot_strong_scaling(self, nprocs, dim, size, degrees, dt, time, solver, opt):
-        b.combine_series([('np', nprocs), ('dim', dim), ('size', size),
-                          ('degree', degrees), ('dt', dt), ('T', time),
-                          ('solver', solver), ('opt', opt)],
-                         filename='EigenmodeLF4')
-
+    def plot_strong_scaling(self, nprocs, regions):
         groups = ['solver', 'opt']
         xlabel = 'Number of processors'
 
         # Plot classic strong scaling plot
-        b.plot(figsize=b.figsize, format='pdf', figname='SeigenStrong',
-               xaxis='np', xlabel=xlabel, xticklabels=args.parallel,
-               groups=groups, regions=regions, kinds='loglog', axis='tight',
-               title='', labels=labels, legend={'loc': 'best'})
+        self.plot(figsize=b.figsize, format='pdf', figname='SeigenStrong',
+                  xaxis='np', xlabel=xlabel, xticklabels=nprocs,
+                  groups=groups, regions=regions, kinds='loglog', axis='tight',
+                  title='', labels=labels, legend={'loc': 'best'})
 
         # Plot parallel efficiency
         efficiency = lambda xvals, yvals: [xvals[0]*yvals[0]/(x*y)
                                            for x, y in zip(xvals, yvals)]
-        b.plot(figsize=b.figsize, format='pdf', figname='SeigenStrongEfficiency',
-               ylabel='Parallel efficiency w.r.t. %d cores' % nprocs[0],
-               xaxis='np', xlabel=xlabel, xticklabels=args.parallel,
-               groups=groups, regions=regions, kinds='semilogx', axis='tight',
-               title='', labels=labels, transform=efficiency, ymin=0)
+        self.plot(figsize=b.figsize, format='pdf', figname='SeigenStrongEfficiency',
+                  ylabel='Parallel efficiency w.r.t. %d cores' % nprocs[0],
+                  xaxis='np', xlabel=xlabel, xticklabels=args.parallel,
+                  groups=groups, regions=regions, kinds='semilogx', axis='tight',
+                  title='', labels=labels, transform=efficiency, ymin=0)
+
+    def plot_comparison(self, degrees, regions):
+        groups = ['solver', 'opt']
+        degree_str = ['P%s-DG' % d for d in degrees]
+        # Bar comparison between solver modes and coffee parameters
+        for region in regions:
+            self.plot(figsize=b.figsize, format='pdf', figname='SeigenCompare_%s' % region,
+                      xaxis='degree', xvals=degrees, xticklabels=degree_str,
+                      xlabel='Spatial discretisation', groups=groups, regions=[region],
+                      kinds='bar', title='Performance: %s' % region, labels=labels,
+                      legend={'loc': 'best'})
 
 
 if __name__ == '__main__':
@@ -57,15 +63,19 @@ if __name__ == '__main__':
               (3, 'explicit'): 'Explicit, zero-tracking',
               (4, 'explicit'): 'Explicit, coffee-O4'}
 
-    b = EigenmodePlot(benchmark='Eigenmode2D-Performance',
-                      resultsdir=args.resultsdir, plotdir=args.plotdir)
+    b = EigenmodePlot(benchmark='EigenmodeLF4', resultsdir=args.resultsdir,
+                      plotdir=args.plotdir)
+    b.combine_series([('np', nprocs), ('dim', [args.dim]), ('size', args.size),
+                      ('degree', args.degree), ('dt', [0.125]), ('T', args.time),
+                      ('solver', args.solver), ('opt', args.opt)])
 
     if args.mode == 'strong':
-        b.plot_strong_scaling(nprocs=nprocs, dim=[args.dim], size=args.size,
-                              degrees=degrees, dt=[0.125], time=args.time,
-                              solver=args.solver, opt=args.opt)
+        b.plot_strong_scaling(nprocs=nprocs, regions=regions)
 
-    if args.mode == 'error':
+    elif args.mode == 'comparison':
+        b.plot_comparison(degrees=degrees, regions=regions)
+
+    elif args.mode == 'error':
         from itertools import product
         import numpy as np
         import matplotlib.pyplot as plt
@@ -156,18 +166,3 @@ if __name__ == '__main__':
         fig.savefig(path.join(b.plotdir, figname),
                     orientation='landscape', format='pdf',
                     transparent=True, bbox_inches='tight')
-
-    elif args.mode == 'comparison':
-        # Bar comparison between explicit/implicit and coffee -O3 parameters
-        groups = ['solver', 'opt']
-        b.combine_series([('np', nprocs), ('dim', [dim]), ('size', args.size or [32]),
-                          ('degree', degrees), ('dt', [0.125]), ('T', args.time or [2.0]),
-                          ('solver', args.solver), ('opt', args.opt)],
-                         filename='EigenmodeLF4')
-
-        degree_str = ['P%s-DG' % d for d in degrees]
-        for region in regions:
-            b.plot(figsize=b.figsize, format='pdf', figname='Eigen2DLF4_%s' % region,
-                   xaxis='degree', xvals=degrees, xticklabels=degree_str,
-                   xlabel='Spatial discretisation', groups=groups, regions=[region],
-                   kinds='bar', title='Performance: %s' % region, labels=labels, legend={'loc': 'best'})
