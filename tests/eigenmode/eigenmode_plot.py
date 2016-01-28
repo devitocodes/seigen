@@ -1,5 +1,10 @@
 from eigenmode_bench import EigenmodeBench
 from pybench import parser
+from itertools import product
+from collections import defaultdict
+from operator import itemgetter
+import matplotlib.pyplot as plt
+from os import path
 
 
 class EigenmodePlot(EigenmodeBench):
@@ -35,6 +40,34 @@ class EigenmodePlot(EigenmodeBench):
                       kinds='bar', title='Performance: %s' % region, labels=labels,
                       legend={'loc': 'best'})
 
+    def plot_error_cost(self, results, fieldname, errname):
+        # Plot error-cost diagram for velocity by hand
+        marker = ['D', 'o', '^', 'v']
+        figname = 'SeigenError_%s.pdf' % fieldname
+        fig = plt.figure(figname, figsize=b.figsize, dpi=300)
+        ax = fig.add_subplot(111)
+
+        for deg, res in results.items():
+            sizes, rs = zip(*sorted(res.items(), key=itemgetter(0)))
+            time = [r['timings'].values()[0]['%s solve' % fieldname] for r in rs]
+            error = [r['meta'][errname] for r in rs]
+            spacing = [1. / N for N in sizes]
+            if len(time) > 0:
+                ax.loglog(error, time, label='P%d-DG' % deg, linewidth=2,
+                          linestyle='solid', marker=marker[d-1])
+                for x, y, dx in zip(error, time, spacing):
+                    xy_off = (3, 3) if d < 4 else (-40, -6)
+                    plt.annotate("dx=%4.3f" % dx, xy=(x, y), xytext=xy_off,
+                                 textcoords='offset points', size=8)
+
+        # Manually add legend and axis labels
+        ax.legend(loc='best', ncol=2, fancybox=True, prop={'size': 12})
+        ax.set_xlabel('%s error in L2 norm' % fieldname.capitalize())
+        ax.set_ylabel('Wall time / seconds')
+        fig.savefig(path.join(b.plotdir, figname),
+                    orientation='landscape', format='pdf',
+                    transparent=True, bbox_inches='tight')
+
 
 if __name__ == '__main__':
     p = parser(description="Performance benchmark for 2D eigenmode test.")
@@ -48,6 +81,8 @@ if __name__ == '__main__':
     p.add_argument('-d', '--degree', type=int, nargs='+', default=[4],
                    help='polynomial degrees to plot')
     p.add_argument('-T', '--time', type=float, nargs='+', default=[2.0],
+                   help='total simulated time')
+    p.add_argument('--dt', type=float, nargs='+', default=[0.125],
                    help='total simulated time')
     p.add_argument('--solver', nargs='+', default=['explicit'],
                    help='Solver method used ("implicit", "explicit")')
@@ -65,104 +100,31 @@ if __name__ == '__main__':
 
     b = EigenmodePlot(benchmark='EigenmodeLF4', resultsdir=args.resultsdir,
                       plotdir=args.plotdir)
-    b.combine_series([('np', nprocs), ('dim', [args.dim]), ('size', args.size),
-                      ('degree', args.degree), ('dt', [0.125]), ('T', args.time),
-                      ('solver', args.solver), ('opt', args.opt)])
-
     if args.mode == 'strong':
+        b.combine_series([('np', nprocs), ('dim', [args.dim]), ('size', args.size),
+                          ('degree', args.degree), ('dt', args.dt), ('T', args.time),
+                          ('solver', args.solver), ('opt', args.opt)])
         b.plot_strong_scaling(nprocs=nprocs, regions=regions)
 
     elif args.mode == 'comparison':
+        b.combine_series([('np', nprocs), ('dim', [args.dim]), ('size', args.size),
+                          ('degree', args.degree), ('dt', args.dt), ('T', args.time),
+                          ('solver', args.solver), ('opt', args.opt)])
         b.plot_comparison(degrees=degrees, regions=regions)
 
     elif args.mode == 'error':
-        from itertools import product
-        import numpy as np
-        import matplotlib.pyplot as plt
-
-        # Hack to do an error-cost plot
-        size = args.size or [32]
-        keys = []
-        stime = []
-        utime = []
-        u_err = []
-        s_err = []
-        us_dx = []
-        marker = ['D', 'o', '^', 'v']
-        for d, N in product(degrees, size):
-            dt = [0.5*(1.0/N)/(2.0**(d-1))]
-            r = EigenmodePlot(benchmark='Eigenmode2D-Performance',
-                              resultsdir=args.resultsdir, plotdir=args.plotdir)
-            r.combine_series([('dim', [dim]), ('degree', [d]), ('size', [N]), ('dt', dt),
-                              ('T', [5.0]), ('explicit', [True]), ('opt', [2, 3, 4])],
-                             filename='EigenmodeLF4')
+        # Need to read individual series files because meta data that
+        # holds our error norms get overwritten in combine_series().
+        results = defaultdict(dict)
+        for d, N in product(degrees, args.size):
+            r = EigenmodePlot(benchmark='EigenmodeLF4', resultsdir=args.resultsdir,
+                              plotdir=args.plotdir)
+            r.combine_series([('np', nprocs), ('dim', [args.dim]), ('degree', [d]),
+                              ('size', [N]), ('dt', args.dt), ('T', args.time),
+                              ('solver', args.solver), ('opt', args.opt)])
             if len(r.result['timings']) > 0:
-                # Record err and cost for each d-N combination we can find
-                keys.append((d, N))
-                us_dx.append(1. / N)
-                timings = r.result['timings'].values()
-                s_err.append(r.result['meta']['s_error'])
-                u_err.append(r.result['meta']['u_error'])
-                stime.append(timings[0]['stress solve'])
-                utime.append(timings[0]['velocity solve'])
+                results[d][N] = r.result
 
-        # Plot error-cost diagram by hand
-        figname = 'Eigen2DLF4_error_velocity.pdf'
-        fig = plt.figure(figname, figsize=b.figsize, dpi=300)
-        ax = fig.add_subplot(111)
-        keys = np.array(keys)
-        us_dx = np.array(us_dx)
-        utime = np.array(utime)
-        u_err = np.array(u_err)
-
-        for d in degrees:
-            d_keys = (keys[:, 0] == d)
-            d_utime = utime[d_keys]
-            d_u_err = u_err[d_keys]
-            d_dx = us_dx[d_keys]
-            if len(d_utime) > 0:
-                ax.loglog(d_u_err, d_utime, label='P%d-DG' % d, linewidth=2,
-                          linestyle='solid', marker=marker[d-1])
-                for x, y, dx in zip(d_u_err, d_utime, d_dx):
-                    xy_off = (3, 3) if d < 4 else (-40, -6)
-                    plt.annotate("dx=%4.3f" % dx, xy=(x, y), xytext=xy_off,
-                                 textcoords='offset points', size=8)
-
-        # Manually add legend and axis labels
-        l = ax.legend(loc='best', ncol=2, fancybox=True, prop={'size': 12})
-        ax.set_xlabel('Velocity error in L2 norm')
-        ax.set_ylabel('Wall time / seconds')
-
-        from os import path
-        fig.savefig(path.join(b.plotdir, figname),
-                    orientation='landscape', format='pdf',
-                    transparent=True, bbox_inches='tight')
-
-        # Plot error-cost diagram by hand
-        figname = 'Eigen2DLF4_error_stress.pdf'
-        fig = plt.figure(figname, figsize=b.figsize, dpi=300)
-        ax = fig.add_subplot(111)
-        stime = np.array(stime)
-        s_err = np.array(s_err)
-        for d in degrees:
-            d_keys = (keys[:, 0] == d)
-            d_stime = stime[d_keys]
-            d_s_err = s_err[d_keys]
-            d_dx = us_dx[d_keys]
-            if len(d_stime) > 0:
-                ax.loglog(d_s_err, d_stime, label='P%d-DG' % d, linewidth=2,
-                          linestyle='solid', marker=marker[d-1])
-                for x, y, dx in zip(d_s_err, d_stime, d_dx):
-                    xy_off = (3, 3) if d < 4 else (-40, -6)
-                    plt.annotate("dx=%4.3f" % dx, xy=(x, y), xytext=xy_off,
-                                 textcoords='offset points', size=8)
-
-        # Manually add legend and axis labels
-        l = ax.legend(loc='best', ncol=2, fancybox=True, prop={'size': 12})
-        ax.set_xlabel('Stress error in L2 norm')
-        ax.set_ylabel('Wall time / seconds')
-
-        from os import path
-        fig.savefig(path.join(b.plotdir, figname),
-                    orientation='landscape', format='pdf',
-                    transparent=True, bbox_inches='tight')
+        # Plot custom error-cost plots from the result set
+        b.plot_error_cost(results, 'velocity', 'u_error')
+        b.plot_error_cost(results, 'stress', 's_error')
