@@ -2,7 +2,7 @@ from firedrake import *
 from firedrake.petsc import PETSc
 
 from pyop2.utils import cached_property
-from pyop2.profiling import timed_region
+from pyop2.profiling import timed_region, summary
 from pyop2.base import _trace, Dat, DataSet
 from pyop2.configuration import configuration
 from pyop2.fusion import loop_chain, loop_chain_tag
@@ -281,11 +281,15 @@ class ElasticLF4(object):
         if identifier in self.asts:
             return self.asts[identifier]
 
+        from coffee.plan import isa
+        doubles_per_register = isa['dp_reg']
+
         # Craft the AST
         body = ast.Incr(ast.Symbol('C', ('i/%d' % cdim, 'i%%%d' % cdim)),
                         ast.Prod(ast.Symbol('A', ('i',), ((ndofs*cdim, 'j*%d + k' % cdim),)),
                                  ast.Symbol('B', ('j', 'k'))))
-        body = ast.c_for('k', cdim, body).children[0]
+        pragma = "#pragma simd" if cdim % doubles_per_register == 0 else ""
+        body = ast.c_for('k', cdim, body, pragma).children[0]
         body = [ast.Assign(ast.Symbol('C', ('i/%d' % cdim, 'i%%%d' % cdim)), '0.0'),
                 ast.c_for('j', ndofs, body).children[0]]
         body = ast.Root([ast.c_for('i', ndofs*cdim, body).children[0]])
@@ -323,6 +327,8 @@ class ElasticLF4(object):
                 if(s):
                     pass  # FIXME: Cannot currently write tensor valued fields to a VTU file. See https://github.com/firedrakeproject/firedrake/issues/538
                     #self.s_stream << s
+            if op2.MPI.comm.rank == 0:
+                summary()
 
     def run(self, T):
         """ Run the elastic wave simulation until t = T.
@@ -334,9 +340,16 @@ class ElasticLF4(object):
         print "Generating inverse mass matrix"
         # Pre-assemble the inverse mass matrices, which should stay
         # constant throughout the simulation (assuming no mesh adaptivity).
-        with timed_region('inverse mass matrix'):
-            self.assemble_inverse_mass()
-            self.copy_massmatrix_into_dat()
+        start = time()
+        self.assemble_inverse_mass()
+        end = time()
+        print "DONE! (Elapsed: ", round(end - start, 3), "s )"
+        print "Copying inverse mass matrix into a dat..."
+        start = time()
+        self.copy_massmatrix_into_dat()
+        end = time()
+        print "DONE! (Elapsed: ", round(end - start, 3), "s )"
+        op2.MPI.comm.barrier()
 
         with timed_region('timestepping'):
             t = self.dt
@@ -359,14 +372,15 @@ class ElasticLF4(object):
                     self.solve(self.rhs_stemp, self.stress_mass_asdat, self.stemp)
                     self.solve(self.rhs_uh2, self.velocity_mass_asdat, self.uh2)
                     self.solve(self.rhs_u1, self.velocity_mass_asdat, self.u1)
-                    self.u0.assign(self.u1)
 
                     # Solve for the stress tensor field.
                     self.solve(self.rhs_sh1, self.stress_mass_asdat, self.sh1)
                     self.solve(self.rhs_utemp, self.velocity_mass_asdat, self.utemp)
                     self.solve(self.rhs_sh2, self.stress_mass_asdat, self.sh2)
                     self.solve(self.rhs_s1, self.stress_mass_asdat, self.s1)
-                    self.s0.assign(self.s1)
+
+                self.u0.assign(self.u1)
+                self.s0.assign(self.s1)
 
                 # Write out the new fields
                 self.write(self.u1, self.s1, timestep % self.output == 0)
@@ -431,7 +445,10 @@ class ExplosiveSourceLF4():
         num_solves = ElasticLF4.num_solves
         if split_mode > 0 and split_mode < num_solves:
             num_solves = split_mode
-        mesh.topology.init(s_depth=calculate_sdepth(num_solves, num_unroll, extra_halo))
+        s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
+        mesh.topology.init(s_depth=s_depth)
+        if op2.MPI.comm.rank == 0:
+            print "S_DEPTH = ", s_depth
         # This is only to print out info related to tiling
         slope(mesh, debug=True)
         return mesh
@@ -496,6 +513,8 @@ class ExplosiveSourceLF4():
                     tile_size=tile_size,
                     extra_halo=extra_halo,
                     split_mode=split_mode)
+        if op2.MPI.comm.rank == 0:
+            summary()
 
         return u1, s1
 
@@ -524,12 +543,9 @@ if __name__ == '__main__':
         'log': args.log
     }
 
-    # Simulation constants
-    h = 2.5  # Cell size
-
     # Is it just a run to check correctness?
     if check:
-        Lx, Ly, time_max, tolerance = 20, 20, 0.01, 1e-10
+        Lx, Ly, h, time_max, tolerance = 20, 20, 2.5, 0.01, 1e-10
         print "Checking correctness of original and tiled versions, with:"
         print "    (Lx, Ly, T, tolerance)=%s" % str((Lx, Ly, time_max, tolerance))
         print "    %s" % tiling
@@ -554,10 +570,10 @@ if __name__ == '__main__':
 
     # Set the mesh size based on input parameters
     try:
-        Lx, Ly = eval(mesh_size)
+        Lx, Ly, h = eval(mesh_size)
     except:
         # Original mesh size
-        Lx, Ly = 300.0, 150.0
+        Lx, Ly, h = 300.0, 150.0, 2.5
 
     if profile:
         import cProfile
