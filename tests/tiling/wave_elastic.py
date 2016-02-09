@@ -285,15 +285,17 @@ class ElasticLF4(object):
         doubles_per_register = isa['dp_reg']
 
         # Craft the AST
-        body = ast.Incr(ast.Symbol('C', ('i/%d' % cdim, 'i%%%d' % cdim)),
+        body = ast.Incr(ast.Symbol('C', ('i/%d' % cdim, 'index')),
                         ast.Prod(ast.Symbol('A', ('i',), ((ndofs*cdim, 'j*%d + k' % cdim),)),
                                  ast.Symbol('B', ('j', 'k'))))
-        pragma = "#pragma simd" if cdim % doubles_per_register == 0 else ""
-        body = ast.c_for('k', cdim, body, pragma).children[0]
-        body = [ast.Assign(ast.Symbol('C', ('i/%d' % cdim, 'i%%%d' % cdim)), '0.0'),
+        body = ast.c_for('k', cdim, body).children[0]
+        body = [ast.Decl('const int', ast.Symbol('index'), init=ast.Symbol('i%%%d' % cdim)),
+                ast.Assign(ast.Symbol('C', ('i/%d' % cdim, 'index' % cdim)), '0.0'),
                 ast.c_for('j', ndofs, body).children[0]]
         body = ast.Root([ast.c_for('i', ndofs*cdim, body).children[0]])
-        funargs = [ast.Decl('double*', 'A'), ast.Decl('double**', 'B'), ast.Decl('double**', 'C')]
+        funargs = [ast.Decl('double* restrict', 'A'),
+                   ast.Decl('double** restrict', 'B'),
+                   ast.Decl('double** restrict', 'C')]
         fundecl = ast.FunDecl('void', name, funargs, body, ['static', 'inline'])
 
         # Track the AST for later fast retrieval
