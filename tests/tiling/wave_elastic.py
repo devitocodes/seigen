@@ -308,12 +308,18 @@ class ElasticLF4(object):
         F_a = assemble(rhs)
         ast_matmul = self.ast_matmul(F_a)
 
+        # HACK: preven mat-vec args from flattening
+        arg0 = F_a.dat(op2.READ, F_a.cell_node_map())
+        arg1 = result.dat(op2.WRITE, result.cell_node_map())
+        arg0.hackflatten = True
+        arg1.hackflatten = True
+
         # Create the par loop (automatically added to the trace of loops to be executed)
         kernel = op2.Kernel(ast_matmul, ast_matmul.name)
         op2.par_loop(kernel, self.mesh.cell_set,
                      matrix_asdat(op2.READ),
-                     F_a.dat(op2.READ, F_a.cell_node_map()),
-                     result.dat(op2.WRITE, result.cell_node_map()))
+                     arg0,
+                     arg1)
 
     def write(self, u=None, s=None, output=True):
         r""" Write the velocity and/or stress fields to file.
@@ -351,45 +357,46 @@ class ElasticLF4(object):
         print "DONE! (Elapsed: ", round(end - start, 3), "s )"
         op2.MPI.comm.barrier()
 
-        with timed_region('timestepping'):
-            t = self.dt
-            timestep = 0
-            while t <= T + 1e-12:
-                if timestep % self.output == 0:
-                    print "t = %f, (timestep = %d)" % (t, timestep)
-                with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf,
-                                mode=self.tiling_mode, extra_halo=self.tiling_halo,
-                                partitioning=self.tiling_part, split_mode=self.tiling_split,
-                                log=self.tiling_log):
-                    # In case the source is time-dependent, update the time 't' here.
-                    if(self.source):
-                        with timed_region('source term update'):
-                            self.source_expression.t = t
-                            self.source = self.source_expression
+        start = time()
+        t = self.dt
+        timestep = 0
+        while t <= T + 1e-12:
+            if timestep % self.output == 0:
+                print "t = %f, (timestep = %d)" % (t, timestep)
+            with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf,
+                            mode=self.tiling_mode, extra_halo=self.tiling_halo,
+                            partitioning=self.tiling_part, split_mode=self.tiling_split,
+                            log=self.tiling_log):
+                # In case the source is time-dependent, update the time 't' here.
+                if(self.source):
+                    with timed_region('source term update'):
+                        self.source_expression.t = t
+                        self.source = self.source_expression
 
-                    # Solve for the velocity vector field.
-                    self.solve(self.rhs_uh1, self.velocity_mass_asdat, self.uh1)
-                    self.solve(self.rhs_stemp, self.stress_mass_asdat, self.stemp)
-                    self.solve(self.rhs_uh2, self.velocity_mass_asdat, self.uh2)
-                    self.solve(self.rhs_u1, self.velocity_mass_asdat, self.u1)
+                # Solve for the velocity vector field.
+                self.solve(self.rhs_uh1, self.velocity_mass_asdat, self.uh1)
+                self.solve(self.rhs_stemp, self.stress_mass_asdat, self.stemp)
+                self.solve(self.rhs_uh2, self.velocity_mass_asdat, self.uh2)
+                self.solve(self.rhs_u1, self.velocity_mass_asdat, self.u1)
 
-                    # Solve for the stress tensor field.
-                    self.solve(self.rhs_sh1, self.stress_mass_asdat, self.sh1)
-                    self.solve(self.rhs_utemp, self.velocity_mass_asdat, self.utemp)
-                    self.solve(self.rhs_sh2, self.stress_mass_asdat, self.sh2)
-                    self.solve(self.rhs_s1, self.stress_mass_asdat, self.s1)
+                # Solve for the stress tensor field.
+                self.solve(self.rhs_sh1, self.stress_mass_asdat, self.sh1)
+                self.solve(self.rhs_utemp, self.velocity_mass_asdat, self.utemp)
+                self.solve(self.rhs_sh2, self.stress_mass_asdat, self.sh2)
+                self.solve(self.rhs_s1, self.stress_mass_asdat, self.s1)
 
-                self.u0.assign(self.u1)
-                self.s0.assign(self.s1)
+            self.u0.assign(self.u1)
+            self.s0.assign(self.s1)
 
-                # Write out the new fields
-                self.write(self.u1, self.s1, timestep % self.output == 0)
+            # Write out the new fields
+            self.write(self.u1, self.s1, timestep % self.output == 0)
 
-                # Move onto next timestep
-                t += self.dt
-                timestep += 1
+            # Move onto next timestep
+            t += self.dt
+            timestep += 1
+        end = time()
 
-        return self.u1, self.s1
+        return start, end, self.u1, self.s1
 
 
 # Helper stuff
@@ -440,7 +447,7 @@ def cfl_dt(dx, Vp, courant_number):
 
 class ExplosiveSourceLF4():
 
-    def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, mesh_file=None, output=1, tiling=None):
+    def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, cn=0.05, mesh_file=None, output=1, tiling=None):
 
         # Tiling info
         tile_size = tiling['tile_size']
@@ -448,20 +455,23 @@ class ExplosiveSourceLF4():
         extra_halo = tiling['extra_halo']
         part_mode = tiling['partitioning']
         split_mode = tiling['split_mode']
+        fusion_mode = tiling['mode']
 
         with timed_region('mesh generation'):
             # Get a mesh ...
             mesh = Mesh(mesh_file) if mesh_file else RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
 
             # Set a proper sdepth ...
-            num_solves = ElasticLF4.num_solves
-            if split_mode > 0 and split_mode < num_solves:
-                num_solves = split_mode
-            s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
+            if fusion_mode in ['soft', 'hard']:
+                s_depth = 1
+            else:
+                num_solves = ElasticLF4.num_solves
+                if split_mode > 0 and split_mode < num_solves:
+                    num_solves = split_mode
+                s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
             mesh.topology.init(s_depth=s_depth)
-            if op2.MPI.comm.rank == 0:
-                print "S_DEPTH = ", s_depth
             slope(mesh, debug=True)
+            print "S_DEPTH =", s_depth
 
             # Instantiate the model ...
             self.elastic = ElasticLF4(mesh, "DG", 2, dimension=2, output=output, tiling=tiling)
@@ -477,7 +487,7 @@ class ExplosiveSourceLF4():
         print "S-wave velocity: %f" % self.Vs
 
         self.dx = h
-        self.courant_number = 0.05
+        self.courant_number = cn
         self.elastic.dt = cfl_dt(self.dx, self.Vp, self.courant_number)
         print "Using a timestep of %f" % self.elastic.dt # This was previously hard-coded to be 0.001 s.
 
@@ -500,9 +510,7 @@ class ExplosiveSourceLF4():
         self.elastic.s0.assign(Function(self.elastic.S).interpolate(sic))
 
         # Run the simulation
-        start = time()
-        u1, s1 = self.elastic.run(T)
-        end = time()
+        start, end, u1, s1 = self.elastic.run(T)
 
         # Print runtime summary
         output_time(start, end,
@@ -528,13 +536,13 @@ if __name__ == '__main__':
     configuration['profiling'] = True
 
     # Parse the input
-    args = parser(profile=False, check=False, time_max=2.5, h=2.5)
+    args = parser(profile=False, check=False, time_max=2.5, h=2.5, cn=0.05, flatten=False)
     profile = args.profile
     check = args.check
     mesh_size = args.mesh_size
     mesh_file = args.mesh_file
     time_max = float(args.time_max)
-    h = args.h
+    flatten = args.flatten
     tiling = {
         'num_unroll': args.num_unroll,
         'tile_size': args.tile_size,
@@ -573,11 +581,11 @@ if __name__ == '__main__':
     # Set the input mesh
     if mesh_file:
         try:
-            h = float(args.h)
+            h, cn = float(args.h), float(args.cn)
             print "Using the unstructured mesh %s" % mesh_file
         except:
             raise RuntimeError("Provided a mesh file, but missing a valid h")
-        kwargs = {'T': time_max, 'mesh_file': mesh_file, 'h': h, 'output': output, 'tiling': tiling}
+        kwargs = {'T': time_max, 'mesh_file': mesh_file, 'h': h, 'cn': cn, 'output': output, 'tiling': tiling}
     else:
         try:
             Lx, Ly, h = eval(mesh_size)
@@ -586,6 +594,12 @@ if __name__ == '__main__':
             Lx, Ly, h = 300.0, 150.0, 2.5
         print "Using the structured mesh with values (Lx,Ly,h)=%s" % str((Lx, Ly, h))
         kwargs = {'T': time_max, 'Lx': Lx, 'Ly': Ly, 'h': h, 'output': output, 'tiling': tiling}
+
+    # HACK: should fields be flattened in the generated code ?
+    if flatten:
+        from pyop2.configuration import configuration
+        configuration['flatten'] = True
+        parameters['coffee']['flatten'] = True
 
     if profile:
         import cProfile
