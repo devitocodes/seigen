@@ -440,20 +440,7 @@ def cfl_dt(dx, Vp, courant_number):
 
 class ExplosiveSourceLF4():
 
-    def generate_mesh(self, Lx=300.0, Ly=150.0, h=2.5, num_unroll=1, extra_halo=0, split_mode=0):
-        mesh = RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
-        num_solves = ElasticLF4.num_solves
-        if split_mode > 0 and split_mode < num_solves:
-            num_solves = split_mode
-        s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
-        mesh.topology.init(s_depth=s_depth)
-        if op2.MPI.comm.rank == 0:
-            print "S_DEPTH = ", s_depth
-        # This is only to print out info related to tiling
-        slope(mesh, debug=True)
-        return mesh
-
-    def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, output=1, tiling=None):
+    def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, mesh_file=None, output=1, tiling=None):
 
         # Tiling info
         tile_size = tiling['tile_size']
@@ -463,7 +450,20 @@ class ExplosiveSourceLF4():
         split_mode = tiling['split_mode']
 
         with timed_region('mesh generation'):
-            mesh = self.generate_mesh(Lx, Ly, h, num_unroll, extra_halo, split_mode)
+            # Get a mesh ...
+            mesh = Mesh(mesh_file) if mesh_file else RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
+
+            # Set a proper sdepth ...
+            num_solves = ElasticLF4.num_solves
+            if split_mode > 0 and split_mode < num_solves:
+                num_solves = split_mode
+            s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
+            mesh.topology.init(s_depth=s_depth)
+            if op2.MPI.comm.rank == 0:
+                print "S_DEPTH = ", s_depth
+            slope(mesh, debug=True)
+
+            # Instantiate the model ...
             self.elastic = ElasticLF4(mesh, "DG", 2, dimension=2, output=output, tiling=tiling)
 
         # Constants
@@ -528,11 +528,13 @@ if __name__ == '__main__':
     configuration['profiling'] = True
 
     # Parse the input
-    args = parser(profile=False, check=False, time_max=2.5)
+    args = parser(profile=False, check=False, time_max=2.5, h=2.5)
     profile = args.profile
     check = args.check
     mesh_size = args.mesh_size
+    mesh_file = args.mesh_file
     time_max = float(args.time_max)
+    h = args.h
     tiling = {
         'num_unroll': args.num_unroll,
         'tile_size': args.tile_size,
@@ -568,16 +570,26 @@ if __name__ == '__main__':
         # Every timestep
         output = 1
 
-    # Set the mesh size based on input parameters
-    try:
-        Lx, Ly, h = eval(mesh_size)
-    except:
-        # Original mesh size
-        Lx, Ly, h = 300.0, 150.0, 2.5
+    # Set the input mesh
+    if mesh_file:
+        try:
+            h = float(args.h)
+            print "Using the unstructured mesh %s" % mesh_file
+        except:
+            raise RuntimeError("Provided a mesh file, but missing a valid h")
+        kwargs = {'T': time_max, 'mesh_file': mesh_file, 'h': h, 'output': output, 'tiling': tiling}
+    else:
+        try:
+            Lx, Ly, h = eval(mesh_size)
+        except:
+            # Original mesh size
+            Lx, Ly, h = 300.0, 150.0, 2.5
+        print "Using the structured mesh with values (Lx,Ly,h)=%s" % str((Lx, Ly, h))
+        kwargs = {'T': time_max, 'Lx': Lx, 'Ly': Ly, 'h': h, 'output': output, 'tiling': tiling}
 
     if profile:
         import cProfile
-        cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h, output, tiling)',
+        cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(**kwargs)',
                      'log.cprofile')
     else:
-        u1, s1 = ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h, output, tiling)
+        u1, s1 = ExplosiveSourceLF4().explosive_source_lf4(**kwargs)
