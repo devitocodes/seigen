@@ -329,8 +329,6 @@ class ElasticLF4(object):
                 if(s):
                     pass  # FIXME: Cannot currently write tensor valued fields to a VTU file. See https://github.com/firedrakeproject/firedrake/issues/538
                     #self.s_stream << s
-            if op2.MPI.comm.rank == 0:
-                summary()
 
     def run(self, T):
         """ Run the elastic wave simulation until t = T.
