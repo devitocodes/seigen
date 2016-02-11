@@ -507,7 +507,7 @@ class ExplosiveSourceLF4():
         # Print runtime summary
         output_time(start, end,
                     tofile=True,
-                    fs=self.elastic.U,
+                    fs=self.elastic.S,
                     nloops=ElasticLF4.loop_chain_length * num_unroll,
                     partitioning=part_mode,
                     tile_size=tile_size,
