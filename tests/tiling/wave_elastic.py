@@ -447,7 +447,8 @@ def cfl_dt(dx, Vp, courant_number):
 
 class ExplosiveSourceLF4():
 
-    def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, cn=0.05, mesh_file=None, output=1, tiling=None):
+    def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, cn=0.05,
+                             mesh_file=None, output=1, poly=2, tiling=None):
 
         # Tiling info
         tile_size = tiling['tile_size']
@@ -471,10 +472,12 @@ class ExplosiveSourceLF4():
                 s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
             mesh.topology.init(s_depth=s_depth)
             slope(mesh, debug=True)
-            print "S_DEPTH =", s_depth
 
             # Instantiate the model ...
-            self.elastic = ElasticLF4(mesh, "DG", 2, dimension=2, output=output, tiling=tiling)
+            self.elastic = ElasticLF4(mesh, "DG", poly, dimension=2, output=output, tiling=tiling)
+
+        print "S_depth used:", s_depth
+        print "Polynomial order:", poly
 
         # Constants
         self.elastic.density = 1.0
@@ -536,13 +539,15 @@ if __name__ == '__main__':
     configuration['profiling'] = True
 
     # Parse the input
-    args = parser(profile=False, check=False, time_max=2.5, h=2.5, cn=0.05, flatten=False)
+    args = parser(profile=False, check=False, time_max=2.5, h=2.5, cn=0.05,
+                  flatten=False, poly=2)
     profile = args.profile
     check = args.check
     mesh_size = args.mesh_size
     mesh_file = args.mesh_file
     time_max = float(args.time_max)
     flatten = args.flatten
+    poly = int(args.poly)
     tiling = {
         'num_unroll': args.num_unroll,
         'tile_size': args.tile_size,
@@ -585,7 +590,8 @@ if __name__ == '__main__':
             print "Using the unstructured mesh %s" % mesh_file
         except:
             raise RuntimeError("Provided a mesh file, but missing a valid h")
-        kwargs = {'T': time_max, 'mesh_file': mesh_file, 'h': h, 'cn': cn, 'output': output, 'tiling': tiling}
+        kwargs = {'T': time_max, 'mesh_file': mesh_file, 'h': h, 'cn': cn,
+                  'output': output, 'poly': poly, 'tiling': tiling}
     else:
         try:
             Lx, Ly, h = eval(mesh_size)
@@ -593,7 +599,8 @@ if __name__ == '__main__':
             # Original mesh size
             Lx, Ly, h = 300.0, 150.0, 2.5
         print "Using the structured mesh with values (Lx,Ly,h)=%s" % str((Lx, Ly, h))
-        kwargs = {'T': time_max, 'Lx': Lx, 'Ly': Ly, 'h': h, 'output': output, 'tiling': tiling}
+        kwargs = {'T': time_max, 'Lx': Lx, 'Ly': Ly, 'h': h, 'output': output, 'poly': poly,
+                  'tiling': tiling}
 
     # HACK: should fields be flattened in the generated code ?
     if flatten:
