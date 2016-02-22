@@ -83,7 +83,6 @@ class ElasticLF4(object):
             self.tiling_uf = tiling['num_unroll']
             self.tiling_mode = tiling['mode']
             self.tiling_halo = tiling['extra_halo']
-            self.tiling_part = tiling['partitioning']
             self.tiling_split = tiling['split_mode']
             self.tiling_log = tiling['log']
 
@@ -365,8 +364,7 @@ class ElasticLF4(object):
                 print "t = %f, (timestep = %d)" % (t, timestep)
             with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf,
                             mode=self.tiling_mode, extra_halo=self.tiling_halo,
-                            partitioning=self.tiling_part, split_mode=self.tiling_split,
-                            log=self.tiling_log):
+                            split_mode=self.tiling_split, log=self.tiling_log):
                 # In case the source is time-dependent, update the time 't' here.
                 if(self.source):
                     with timed_region('source term update'):
@@ -462,7 +460,7 @@ class ExplosiveSourceLF4():
             # Get a mesh ...
             mesh = Mesh(mesh_file) if mesh_file else RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
 
-            # Set a proper sdepth ...
+            # Set proper options ...
             if fusion_mode in ['soft', 'hard']:
                 s_depth = 1
             else:
@@ -470,7 +468,11 @@ class ExplosiveSourceLF4():
                 if split_mode > 0 and split_mode < num_solves:
                     num_solves = split_mode
                 s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
-            mesh.topology.init(s_depth=s_depth)
+                kwargs = {'s_depth': s_depth}
+                if part_mode == 'metis':
+                    kwargs['reorder'] = ('parmetis', tile_size)
+
+            mesh.topology.init(**kwargs)
             slope(mesh, debug=True)
 
             # Instantiate the model ...
