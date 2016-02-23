@@ -293,8 +293,8 @@ class ElasticLF4(object):
                 ast.c_for('j', ndofs, body).children[0]]
         body = ast.Root([ast.c_for('i', ndofs*cdim, body).children[0]])
         funargs = [ast.Decl('double* restrict', 'A'),
-                   ast.Decl('double** restrict', 'B'),
-                   ast.Decl('double** restrict', 'C')]
+                   ast.Decl('double *restrict *restrict', 'B'),
+                   ast.Decl('double *restrict *', 'C')]
         fundecl = ast.FunDecl('void', name, funargs, body, ['static', 'inline'])
 
         # Track the AST for later fast retrieval
@@ -463,6 +463,7 @@ class ExplosiveSourceLF4():
             # Set proper options ...
             if fusion_mode in ['soft', 'hard']:
                 s_depth = 1
+                kwargs = {'s_depth': s_depth}
             else:
                 num_solves = ElasticLF4.num_solves
                 if split_mode > 0 and split_mode < num_solves:
@@ -548,7 +549,7 @@ if __name__ == '__main__':
     mesh_size = args.mesh_size
     mesh_file = args.mesh_file
     time_max = float(args.time_max)
-    flatten = args.flatten
+    flatten = True if args.flatten == 'True' else False
     poly = int(args.poly)
     tiling = {
         'num_unroll': args.num_unroll,
