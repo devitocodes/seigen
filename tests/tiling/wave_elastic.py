@@ -14,6 +14,7 @@ import mpi4py
 import numpy as np
 from time import time
 import sys
+import os
 
 from utils.benchmarking import parser, output_time
 from utils.tiling import calculate_sdepth
@@ -446,7 +447,7 @@ def cfl_dt(dx, Vp, courant_number):
 class ExplosiveSourceLF4():
 
     def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, cn=0.05,
-                             mesh_file=None, output=1, poly=2, tiling=None):
+                             mesh_file=None, output=1, poly_order=2, tiling=None):
 
         # Tiling info
         tile_size = tiling['tile_size']
@@ -477,10 +478,10 @@ class ExplosiveSourceLF4():
             slope(mesh, debug=True)
 
             # Instantiate the model ...
-            self.elastic = ElasticLF4(mesh, "DG", poly, dimension=2, output=output, tiling=tiling)
+            self.elastic = ElasticLF4(mesh, "DG", poly_order, dimension=2, output=output, tiling=tiling)
 
         print "S_depth used:", s_depth
-        print "Polynomial order:", poly
+        print "Polynomial order:", poly_order
 
         # Constants
         self.elastic.density = 1.0
@@ -498,9 +499,13 @@ class ExplosiveSourceLF4():
         print "Using a timestep of %f" % self.elastic.dt # This was previously hard-coded to be 0.001 s.
 
         # Source
+        exp_area = (44.5, 45.5, Ly - 1.5, Ly - 0.5)
+        if poly_order == 1:
+            # Adjust explosion area
+            exp_area = (149.5, 150.5, Ly - 1.5, Ly - 0.5)
         a = 159.42
-        self.elastic.source_expression = Expression((("x[0] >= 44.5 && x[0] <= 45.5 && x[1] >= %f && x[1] <= %f ? (-1.0 + 2*a*pow(t - 0.3, 2))*exp(-a*pow(t - 0.3, 2)) : 0.0" % (Ly - 1.5, Ly - 0.5), "0.0"),
-                                                     ("0.0", "x[0] >= 44.5 && x[0] <= 45.5 && x[1] >= %f && x[1] <= %f ? (-1.0 + 2*a*pow(t - 0.3, 2))*exp(-a*pow(t - 0.3, 2)) : 0.0" % (Ly - 1.5, Ly - 0.5))), a=a, t=0)
+        self.elastic.source_expression = Expression((("x[0] >= %f && x[0] <= %f && x[1] >= %f && x[1] <= %f ? (-1.0 + 2*a*pow(t - 0.3, 2))*exp(-a*pow(t - 0.3, 2)) : 0.0" % exp_area, "0.0"),
+                                                     ("0.0", "x[0] >= %f && x[0] <= %f && x[1] >= %f && x[1] <= %f ? (-1.0 + 2*a*pow(t - 0.3, 2))*exp(-a*pow(t - 0.3, 2)) : 0.0" % exp_area)), a=a, t=0)
         self.elastic.source_function = Function(self.elastic.S)
         self.elastic.source = self.elastic.source_expression
 
@@ -526,7 +531,9 @@ class ExplosiveSourceLF4():
                     partitioning=part_mode,
                     tile_size=tile_size,
                     extra_halo=extra_halo,
-                    split_mode=split_mode)
+                    split_mode=split_mode,
+                    poly_order=poly_order,
+                    domain=os.path.splitext(os.path.basename(mesh.name))[0])
         if op2.MPI.comm.rank == 0:
             summary()
 
@@ -543,14 +550,14 @@ if __name__ == '__main__':
 
     # Parse the input
     args = parser(profile=False, check=False, time_max=2.5, h=2.5, cn=0.05,
-                  flatten=False, poly=2)
+                  flatten=False)
     profile = args.profile
     check = args.check
     mesh_size = args.mesh_size
     mesh_file = args.mesh_file
     time_max = float(args.time_max)
     flatten = True if args.flatten == 'True' else False
-    poly = int(args.poly)
+    poly_order = args.poly_order
     tiling = {
         'num_unroll': args.num_unroll,
         'tile_size': args.tile_size,
@@ -594,7 +601,7 @@ if __name__ == '__main__':
         except:
             raise RuntimeError("Provided a mesh file, but missing a valid h")
         kwargs = {'T': time_max, 'mesh_file': mesh_file, 'h': h, 'cn': cn,
-                  'output': output, 'poly': poly, 'tiling': tiling}
+                  'output': output, 'poly_order': poly_order, 'tiling': tiling}
     else:
         try:
             Lx, Ly, h = eval(mesh_size)
@@ -602,8 +609,8 @@ if __name__ == '__main__':
             # Original mesh size
             Lx, Ly, h = 300.0, 150.0, 2.5
         print "Using the structured mesh with values (Lx,Ly,h)=%s" % str((Lx, Ly, h))
-        kwargs = {'T': time_max, 'Lx': Lx, 'Ly': Ly, 'h': h, 'output': output, 'poly': poly,
-                  'tiling': tiling}
+        kwargs = {'T': time_max, 'Lx': Lx, 'Ly': Ly, 'h': h, 'output': output,
+                  'poly_order': poly_order, 'tiling': tiling}
 
     # HACK: should fields be flattened in the generated code ?
     if flatten:
