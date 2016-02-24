@@ -42,6 +42,7 @@ class ElasticLF4(object):
         :returns: None
         """
         with timed_region('function setup'):
+            self.degree = degree
             self.mesh = mesh
             self.dimension = dimension
             self.output = output
@@ -49,7 +50,11 @@ class ElasticLF4(object):
             self.S = TensorFunctionSpace(mesh, family, degree, name='S')
             self.U = VectorFunctionSpace(mesh, family, degree, name='U')
             # Assumes that the S and U function spaces are the same.
-            print "Number of degrees of freedom: %d" % op2.MPI.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
+            self.S_tot_dofs = op2.MPI.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
+            self.U_tot_dofs = op2.MPI.comm.allreduce(self.U.dof_count, op=mpi4py.MPI.SUM)
+            if op2.MPI.comm.rank == 0:
+                print "Number of degrees of freedom (Velocity): %d" % self.U_tot_dofs
+                print "Number of degrees of freedom (Stress): %d" % self.S_tot_dofs
 
             self.s = TrialFunction(self.S)
             self.v = TestFunction(self.S)
@@ -86,9 +91,11 @@ class ElasticLF4(object):
             self.tiling_halo = tiling['extra_halo']
             self.tiling_split = tiling['split_mode']
             self.tiling_log = tiling['log']
+            self.tiling_sdepth = tiling['s_depth']
 
-            # AST cache
+            # Caches
             self.asts = {}
+            self.mass_cache = "/data/cache"
 
         if self.output:
             with timed_region('i/o'):
@@ -140,29 +147,55 @@ class ElasticLF4(object):
         self.imass_stress = self.inverse_mass_stress.M
 
     def copy_massmatrix_into_dat(self):
+        mesh_name = os.path.splitext(os.path.basename(self.mesh.name))[0]
+        filename = os.path.join(self.mass_cache, "np%d" % op2.MPI.comm.size,
+                                "sdepth%d" % self.tiling_sdepth, mesh_name)
+
         # Copy the velocity mass matrix into a Dat
         vmat = self.imass_velocity.handle
         arity = sum(self.U.topological.dofs_per_entity)*self.U.topological.dim
         self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
-        istart, iend = vmat.getOwnershipRange()
-        idxs = [ PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
-                                          comm=PETSc.COMM_SELF)
-                 for i in range(istart, iend, arity)]
-        submats = vmat.getSubMatrices(idxs, idxs)
-        for i, m in enumerate(submats):
-           self.velocity_mass_asdat.data[i] = m[:, :].flatten()
+        U_filename = os.path.join(filename, 'U', 'p%d' % self.degree,
+                                  "ndofs%d_rank%d" % (self.U.dof_count, op2.MPI.comm.rank))
+        try:
+            self.velocity_mass_asdat.load(U_filename)
+            print "Loaded velocity mass matrix from", U_filename
+        except:
+            istart, iend = vmat.getOwnershipRange()
+            idxs = [ PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
+                                              comm=PETSc.COMM_SELF)
+                     for i in range(istart, iend, arity)]
+            submats = vmat.getSubMatrices(idxs, idxs)
+            for i, m in enumerate(submats):
+               self.velocity_mass_asdat.data[i] = m[:, :].flatten()
+            # Store...
+            if not os.path.exists(os.path.dirname(U_filename)):
+                os.makedirs(os.path.dirname(U_filename))
+            self.velocity_mass_asdat.save(U_filename)
+            print "Stored velocity mass matrix into", U_filename
 
         # Copy the stress mass matrix into a Dat
         smat = self.imass_stress.handle
         arity = sum(self.S.topological.dofs_per_entity)*self.S.topological.dim
         self.stress_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
-        istart, iend = smat.getOwnershipRange()
-        idxs = [ PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
-                                          comm=PETSc.COMM_SELF)
-                 for i in range(istart, iend, arity)]
-        submats = smat.getSubMatrices(idxs, idxs)
-        for i, m in enumerate(submats):
-           self.stress_mass_asdat.data[i] = m[:, :].flatten()
+        S_filename = os.path.join(filename, 'S', 'p%d' % self.degree,
+                                  "ndofs%d_rank%d" % (self.S.dof_count, op2.MPI.comm.rank))
+        try:
+            self.stress_mass_asdat.load(S_filename)
+            print "Loaded stress mass matrix from", S_filename
+        except:
+            istart, iend = smat.getOwnershipRange()
+            idxs = [ PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
+                                              comm=PETSc.COMM_SELF)
+                     for i in range(istart, iend, arity)]
+            submats = smat.getSubMatrices(idxs, idxs)
+            for i, m in enumerate(submats):
+               self.stress_mass_asdat.data[i] = m[:, :].flatten()
+            # Store...
+            if not os.path.exists(os.path.dirname(S_filename)):
+                os.makedirs(os.path.dirname(S_filename))
+            self.stress_mass_asdat.save(S_filename)
+            print "Stored stress mass matrix into", S_filename
 
     @property
     def form_uh1(self):
@@ -462,17 +495,18 @@ class ExplosiveSourceLF4():
             mesh = Mesh(mesh_file) if mesh_file else RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
 
             # Set proper options ...
+            kwargs = {}
             if fusion_mode in ['soft', 'hard']:
                 s_depth = 1
-                kwargs = {'s_depth': s_depth}
             else:
                 num_solves = ElasticLF4.num_solves
                 if split_mode > 0 and split_mode < num_solves:
                     num_solves = split_mode
                 s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
-                kwargs = {'s_depth': s_depth}
                 if part_mode == 'metis':
                     kwargs['reorder'] = ('parmetis', tile_size)
+            kwargs['s_depth'] = s_depth
+            tiling['s_depth'] = s_depth
 
             mesh.topology.init(**kwargs)
             slope(mesh, debug=True)
