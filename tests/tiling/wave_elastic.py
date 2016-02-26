@@ -100,8 +100,12 @@ class ElasticLF4(object):
         if self.output:
             with timed_region('i/o'):
                 # File output streams
-                self.u_stream = File("/data/output/velocity.pvd")
-                self.s_stream = File("/data/output/stress.pvd")
+                base = os.path.join('/data', 'output', 'p%d' % self.degree, 'uf%d' % self.tiling_uf)
+                if op2.MPI.comm.rank == 0 and not os.path.exists(os.path.dirname(base)):
+                    os.makedirs(os.path.dirname(base))
+                op2.MPI.comm.barrier()
+                self.u_stream = File(os.path.join(base, 'velocity.pvd'))
+                self.s_stream = File(os.path.join(base, 'stress.pvd'))
 
     @property
     def absorption(self):
