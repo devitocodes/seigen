@@ -508,7 +508,8 @@ class ExplosiveSourceLF4():
                     num_solves = split_mode
                 s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
                 if part_mode == 'metis':
-                    kwargs['reorder'] = ('metis', tile_size)
+                    n_parts = mesh.num_cells() / tile_size
+                    kwargs['reorder'] = ('metis', n_parts)
             kwargs['s_depth'] = s_depth
             tiling['s_depth'] = s_depth
 
