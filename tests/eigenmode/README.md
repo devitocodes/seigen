@@ -33,7 +33,7 @@ done
 ```
 
 ```
-python eigenmode_plot.py comparison -i <arch>/results -o <arch>/plots -p 16 --dim 2 -N 2562 --degree 1 2 3 4 --opt 2 3 4
+python eigenmode_plot.py comparison -i <arch>/results -o <arch>/plots -p 16 --dim 2 -N 256 --degree 1 2 3 4 --opt 2 3 4
 ```
 
 ### Error-cost plots
