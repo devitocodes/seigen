@@ -59,7 +59,5 @@ class EigenmodeBench(Benchmark):
 
 if __name__ == '__main__':
     op2.init(log_level='ERROR')
-    from ffc.log import set_level
-    set_level('ERROR')
 
     EigenmodeBench(N=4, degree=1, dt=0.125).main()
