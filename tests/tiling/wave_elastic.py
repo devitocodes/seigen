@@ -176,6 +176,7 @@ class ElasticLF4(object):
             # Store...
             if op2.MPI.comm.rank == 0 and not os.path.exists(os.path.dirname(U_filename)):
                 os.makedirs(os.path.dirname(U_filename))
+            op2.MPI.comm.barrier()
             self.velocity_mass_asdat.save(U_filename)
             print "Stored velocity mass matrix into", U_filename
 
@@ -199,6 +200,7 @@ class ElasticLF4(object):
             # Store...
             if op2.MPI.comm.rank == 0 and not os.path.exists(os.path.dirname(S_filename)):
                 os.makedirs(os.path.dirname(S_filename))
+            op2.MPI.comm.barrier()
             self.stress_mass_asdat.save(S_filename)
             print "Stored stress mass matrix into", S_filename
 
