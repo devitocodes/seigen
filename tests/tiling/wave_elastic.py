@@ -165,6 +165,7 @@ class ElasticLF4(object):
         try:
             self.velocity_mass_asdat.load(U_filename)
             print "Loaded velocity mass matrix from", U_filename
+            op2.MPI.comm.barrier()
         except:
             istart, iend = vmat.getOwnershipRange()
             idxs = [ PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
@@ -189,6 +190,7 @@ class ElasticLF4(object):
         try:
             self.stress_mass_asdat.load(S_filename)
             print "Loaded stress mass matrix from", S_filename
+            op2.MPI.comm.barrier()
         except:
             istart, iend = smat.getOwnershipRange()
             idxs = [ PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
