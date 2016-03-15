@@ -50,3 +50,10 @@ Then plot with:
 ```
 python eigenmode_plot.py error -i <arch>/results -o <arch>/plots -p 16 --dim 2 -N 4 8 16 32 64 128 --degree 1 2 3 4 -T=5.0 --dt=-1.0 --opt 4
 ```
+
+### Kernel-based roofline plots
+First get stream results via PETSc:
+```
+cd $PETSC_DIR/src/benchmarks/streams
+make stream NPMAX=<NP> MPI_BINDING="--bysocket --bind-to-socket"
+```
