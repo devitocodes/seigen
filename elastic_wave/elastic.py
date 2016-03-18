@@ -294,22 +294,21 @@ class ElasticLF4(object):
 
                     # Solve for the velocity vector field.
                     with timed_region('velocity solve'):
-                        self.solve(self.ctx_uh1, self.invmass_velocity, self.uh1)
-                        self.solve(self.ctx_stemp, self.invmass_stress, self.stemp)
-                        self.solve(self.ctx_uh2, self.invmass_velocity, self.uh2)
-                        self.solve(self.ctx_u1, self.invmass_velocity, self.u1)
-                    self.u0.assign(self.u1)
+                        self.solve(self.ctx_uh1, self.invmass_velocity, self.uh1, stage='uh1')
+                        self.solve(self.ctx_stemp, self.invmass_stress, self.stemp, stage='stemp')
+                        self.solve(self.ctx_uh2, self.invmass_velocity, self.uh2, stage='uh2')
+                        self.solve(self.ctx_u1, self.invmass_velocity, self.u1, stage='u1')
+                        self.u0.assign(self.u1)
+                        _trace.evaluate_all()
 
                     # Solve for the stress tensor field.
                     with timed_region('stress solve'):
-                        self.solve(self.ctx_sh1, self.invmass_stress, self.sh1)
-                        self.solve(self.ctx_utemp, self.invmass_velocity, self.utemp)
-                        self.solve(self.ctx_sh2, self.invmass_stress, self.sh2)
-                        self.solve(self.ctx_s1, self.invmass_stress, self.s1)
-                    self.s0.assign(self.s1)
-
-                # Execute the above scheduled Parloops
-                _trace.evaluate_all()
+                        self.solve(self.ctx_sh1, self.invmass_stress, self.sh1, stage='sh1')
+                        self.solve(self.ctx_utemp, self.invmass_velocity, self.utemp, stage='utemp')
+                        self.solve(self.ctx_sh2, self.invmass_stress, self.sh2, stage='sh2')
+                        self.solve(self.ctx_s1, self.invmass_stress, self.s1, stage='s1')
+                        self.s0.assign(self.s1)
+                        _trace.evaluate_all()
 
                 # Write out the new fields
                 self.write(self.u1, self.s1)
@@ -360,16 +359,17 @@ class ExplicitElasticLF4(ElasticLF4):
         r""" Solution context for explicit methods is the compiled RHS kernel object."""
         return rhs(form)
 
-    def solve(self, rhs, matrix, result):
+    def solve(self, rhs, matrix, result, stage="Explicit Solve"):
         r""" Solve by assembling into RHS vector and applying inverse mass matrix.
         :param rhs: The RHS vector that the inverse mass matrix will be multiplied with.
         :param matrix: The inverse mass matrix.
         :param firedrake.Function result: The solution field.
         :returns: None"""
-        F_a = assemble(rhs)
-        with result.dat.vec as res:
-            with F_a.dat.vec_ro as F_v:
-                matrix.handle.mult(F_v, res)
+        with PETSc.Log.Stage(stage):
+            F_a = assemble(rhs)
+            with result.dat.vec as res:
+                with F_a.dat.vec_ro as F_v:
+                    matrix.handle.mult(F_v, res)
 
     def setup(self):
         r""" Pre-assembles the inverse of the consistent mass matrix for the
