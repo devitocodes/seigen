@@ -4,6 +4,8 @@ from pybench import Benchmark
 from pyop2.profiling import get_timers
 from firedrake import *
 import mpi4py
+from firedrake.petsc import PETSc
+from os import path
 
 parameters["pyop2_options"]["profiling"] = True
 parameters["coffee"]["O2"] = True
@@ -26,6 +28,9 @@ class EigenmodeBench(Benchmark):
         self.series['opt'] = opt
         self.series['degree'] = degree
 
+        # Start PETSc performance logging
+        PETSc.Log().begin()
+
         # If dt is supressed (<0) Infer it based on Courant number
         if dt < 0:
             # Courant number of 0.5: (dx*C)/Vp
@@ -44,6 +49,12 @@ class EigenmodeBench(Benchmark):
 
         for task, timer in get_timers(reset=True).items():
             self.register_timing(task, timer.total)
+
+        # Dump PETSc performance log infor to file
+        logfile = path.join(self.resultsdir, '%s_petsc.py' % self.name)
+        vwr = PETSc.Viewer().createASCII(logfile)
+        vwr.pushFormat(PETSc.Viewer().Format().ASCII_INFO_DETAIL)
+        PETSc.Log().view(vwr)
 
         self.meta['dofs'] = op2.MPI.comm.allreduce(eigen.elastic.S.dof_count, op=mpi4py.MPI.SUM)
         if 'u_error' not in self.meta:

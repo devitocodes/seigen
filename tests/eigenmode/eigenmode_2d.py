@@ -8,7 +8,7 @@ from elastic_wave.helpers import *
 class Eigenmode2DLF4():
 
     def __init__(self, N, degree, dt, solver='explicit', output=True):
-        with timed_region('mesh generation'):
+        with PETSc.Log.Stage("Mesh"):
             self.mesh = UnitSquareMesh(N, N)
 
         self.elastic = ElasticLF4.create(self.mesh, "DG", degree, dimension=2,

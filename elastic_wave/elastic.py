@@ -276,7 +276,9 @@ class ElasticLF4(object):
         self.write(self.u1, self.s1)
 
         # Call solver-specific setup
-        self.setup()
+        with PETSc.Log.Stage("Setup"):
+            self.setup()
+            _trace.evaluate_all()
 
         with timed_region('timestepping'):
             t = self.dt
