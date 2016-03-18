@@ -117,6 +117,10 @@ class ElasticLF4(object):
             self.invmass_velocity = None
             self.invmass_stress = None
 
+        # Initialise internal profiling
+        parameters["seigen"]['trace'] = {}
+        parameters["seigen"]['initial'] = True
+
         if self.output:
             with timed_region('i/o'):
                 # File output streams
@@ -316,6 +320,26 @@ class ElasticLF4(object):
                 # Move onto next timestep
                 t += self.dt
 
+                parameters['seigen']['initial'] = False
+
+        if parameters['seigen']['profiling']:
+            parameters['seigen']['profiling'] = {}
+            for stage, trace in parameters['seigen']['trace'].items():
+                parameters['seigen']['profiling'][stage] = {}
+                for pl in trace:
+                    name = pl.kernel.name
+                    if name == "copy":
+                        continue
+                    parameters['seigen']['profiling'][stage][name] = {}
+                    mem_b = 0
+                    for arg in pl.args:
+                        mem = arg.data.cdim * arg.data.dtype.itemsize
+                        if arg.map:
+                            mem *= arg.map.arity
+                        mem_b += mem * 2 if arg.access._mode == "INC" else mem
+                    parameters['seigen']['profiling'][stage][name]['bytes'] = mem_b
+                    parameters['seigen']['profiling'][stage][name]['flops'] = pl.kernel.num_flops
+                    parameters['seigen']['profiling'][stage][name]['ai'] = float(pl.kernel.num_flops) / mem_b
         return self.u1, self.s1
 
 
@@ -367,6 +391,9 @@ class ExplicitElasticLF4(ElasticLF4):
         :returns: None"""
         with PETSc.Log.Stage(stage):
             F_a = assemble(rhs)
+            if parameters['seigen']['initial']:
+                # Store compute kernels in the PyOP2._trace
+                parameters['seigen']['trace'][stage] = _trace._trace
             with result.dat.vec as res:
                 with F_a.dat.vec_ro as F_v:
                     matrix.handle.mult(F_v, res)

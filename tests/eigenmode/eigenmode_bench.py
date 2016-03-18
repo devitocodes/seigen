@@ -6,9 +6,12 @@ from firedrake import *
 import mpi4py
 from firedrake.petsc import PETSc
 from os import path
+import json
 
 parameters["pyop2_options"]["profiling"] = True
 parameters["coffee"]["O2"] = True
+parameters["seigen"] = {}
+parameters["seigen"]["profiling"] = True
 
 
 class EigenmodeBench(Benchmark):
@@ -55,6 +58,10 @@ class EigenmodeBench(Benchmark):
         vwr = PETSc.Viewer().createASCII(logfile)
         vwr.pushFormat(PETSc.Viewer().Format().ASCII_INFO_DETAIL)
         PETSc.Log().view(vwr)
+
+        profile = path.join(self.resultsdir, '%s_seigen.json' % self.name)
+        with open(profile, 'w') as f:
+            json.dump(parameters['seigen']['profiling'], f, indent=4)
 
         self.meta['dofs'] = op2.MPI.comm.allreduce(eigen.elastic.S.dof_count, op=mpi4py.MPI.SUM)
         if 'u_error' not in self.meta:
