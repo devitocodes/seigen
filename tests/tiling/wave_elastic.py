@@ -16,6 +16,9 @@ from time import time
 import sys
 import os
 
+import platform
+platform = platform.node().split('.')[0]
+
 from utils.benchmarking import parser, output_time
 from utils.tiling import calculate_sdepth
 
@@ -96,12 +99,13 @@ class ElasticLF4(object):
 
             # Caches
             self.asts = {}
-            self.mass_cache = "/data/cache"
+            self.mass_cache = os.path.join("/data", "cache", platform)
 
         if self.output:
             with timed_region('i/o'):
                 # File output streams
-                base = os.path.join('/data', 'output', 'p%d' % self.degree, 'uf%d' % self.tiling_uf)
+                base = os.path.join('/data', 'output', platform,
+                                    'p%d' % self.degree, 'uf%d' % self.tiling_uf)
                 if op2.MPI.comm.rank == 0 and not os.path.exists(os.path.dirname(base)):
                     os.makedirs(os.path.dirname(base))
                 op2.MPI.comm.barrier()
@@ -160,7 +164,7 @@ class ElasticLF4(object):
         vmat = self.imass_velocity.handle
         arity = sum(self.U.topological.dofs_per_entity)*self.U.topological.dim
         self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
-        U_filename = os.path.join(filename, 'U', 'p%d' % self.degree,
+        U_filename = os.path.join(filename, 'U', 'p%d' % self.degree, 'totdofs%d' % self.U_tot_dofs,
                                   "ndofs%d_rank%d" % (self.U.dof_count, op2.MPI.comm.rank))
         try:
             self.velocity_mass_asdat.load(U_filename)
@@ -185,7 +189,7 @@ class ElasticLF4(object):
         smat = self.imass_stress.handle
         arity = sum(self.S.topological.dofs_per_entity)*self.S.topological.dim
         self.stress_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
-        S_filename = os.path.join(filename, 'S', 'p%d' % self.degree,
+        S_filename = os.path.join(filename, 'S', 'p%d' % self.degree, 'totdofs%d' % self.S_tot_dofs,
                                   "ndofs%d_rank%d" % (self.S.dof_count, op2.MPI.comm.rank))
         try:
             self.stress_mass_asdat.load(S_filename)
@@ -520,13 +524,14 @@ class ExplosiveSourceLF4():
             tiling['s_depth'] = s_depth
 
             mesh.topology.init(**kwargs)
-            slope(mesh, debug=True)
+            slope(mesh, debug=False)
 
             # Instantiate the model ...
             self.elastic = ElasticLF4(mesh, "DG", poly_order, dimension=2, output=output, tiling=tiling)
 
-        print "S_depth used:", s_depth
-        print "Polynomial order:", poly_order
+        if op2.MPI.comm.rank == 0:
+            print "S-depth used:", s_depth
+            print "Polynomial order:", poly_order
 
         # Constants
         self.elastic.density = 1.0
@@ -535,13 +540,15 @@ class ExplosiveSourceLF4():
 
         self.Vp = Vp(self.elastic.mu, self.elastic.l, self.elastic.density)
         self.Vs = Vs(self.elastic.mu, self.elastic.density)
-        print "P-wave velocity: %f" % self.Vp
-        print "S-wave velocity: %f" % self.Vs
+        if op2.MPI.comm.rank == 0:
+            print "P-wave velocity: %f" % self.Vp
+            print "S-wave velocity: %f" % self.Vs
 
         self.dx = h
         self.courant_number = cn
         self.elastic.dt = cfl_dt(self.dx, self.Vp, self.courant_number)
-        print "Using a timestep of %f" % self.elastic.dt # This was previously hard-coded to be 0.001 s.
+        if op2.MPI.comm.rank == 0:
+            print "Using a timestep of %f" % self.elastic.dt # This was previously hard-coded to be 0.001 s.
 
         # Source
         exp_area = (44.5, 45.5, Ly - 1.5, Ly - 0.5)
