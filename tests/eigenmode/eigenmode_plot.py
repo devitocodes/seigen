@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from os import path
 from os import environ as env
 import numpy as np
+import json
 
 
 def bandwidth_from_petsc_stream(logfile):
@@ -23,6 +24,7 @@ def bandwidth_from_petsc_stream(logfile):
 
 class EigenmodePlot(EigenmodeBench):
     figsize = (6, 4)
+    marker = ['D', 'o', '^', 'v']
 
     def plot_strong_scaling(self, nprocs, regions):
         groups = ['solver', 'opt']
@@ -56,7 +58,6 @@ class EigenmodePlot(EigenmodeBench):
 
     def plot_error_cost(self, results, fieldname, errname):
         # Plot error-cost diagram for velocity by hand
-        marker = ['D', 'o', '^', 'v']
         figname = 'SeigenError_%s.pdf' % fieldname
         fig = plt.figure(figname, figsize=self.figsize, dpi=300)
         ax = fig.add_subplot(111)
@@ -68,7 +69,7 @@ class EigenmodePlot(EigenmodeBench):
             spacing = [1. / N for N in sizes]
             if len(time) > 0:
                 ax.loglog(error, time, label='P%d-DG' % deg, linewidth=2,
-                          linestyle='solid', marker=marker[d-1])
+                          linestyle='solid', marker=self.marker[d-1])
                 for x, y, dx in zip(error, time, spacing):
                     xy_off = (3, 3) if d < 4 else (-40, -6)
                     plt.annotate("dx=%4.3f" % dx, xy=(x, y), xytext=xy_off,
@@ -82,19 +83,63 @@ class EigenmodePlot(EigenmodeBench):
                     orientation='landscape', format='pdf',
                     transparent=True, bbox_inches='tight')
 
-    def plot_roofline_kernel(self, max_perf, max_bw):
+    def plot_roofline_kernel(self, max_perf, max_bw, series, stage, kernel, label=''):
         # Roofline for individual kernels
-        figname = 'SeigenRoofline.pdf'
+        figname = 'SeigenRoofline-%s.pdf' % label
         fig = plt.figure(figname, figsize=self.figsize, dpi=300)
         ax = fig.add_subplot(111)
 
-        ai = 2 ** np.linspace(-4, 4, 9)
-        perf = ai * max_bw
+        ai_x = 2 ** np.linspace(-1, 6, 8)
+        perf = ai_x * max_bw
         perf[perf > max_perf] = max_perf
-        ax.loglog(ai, perf, '-')
-        ax.set_xlim(left=ai[0], right=ai[-1])
-        ax.set_xticks(ai)
-        ax.set_xticklabels(ai)
+        # Insert the crossover point between BW and flops limit
+        idx = (perf >= max_perf).argmax()
+        ai = np.insert(ai_x, idx, max_perf / max_bw)
+        perf = np.insert(perf, idx, max_perf)
+        ax.loglog(ai, perf, 'k-')
+
+        data_ai = {}
+        data_flops = {}
+        skeys, svals = zip(*sorted(series))
+        for svalues in product(*svals):
+            suff = '_'.join('%s%s' % (k, v) for k, v in zip(skeys, svalues))
+            fpath = path.join(self.resultsdir, '%s_%s' % (self.name, suff))
+            param = dict(zip(skeys, svalues))
+
+            # Get Flops measurements from petsc log files
+            petsc_res = {}
+            execfile('%s_petsc.py' % fpath, globals(), petsc_res)
+            flops = [petsc_res['Stages'][stage][kernel][p]['flops']
+                     for p in range(petsc_res['numProcs'])]
+            time = [petsc_res['Stages'][stage][kernel][p]['time']
+                    for p in range(petsc_res['numProcs'])]
+            flops_s = sum(flops) / max(time) / 1.e6  # 1024 ** 2
+            data_flops[(param['degree'], param['opt'])] = flops_s
+
+            # Get arithmetic intensity from parloop calculations
+            with open('%s_seigen.json' % fpath, 'r') as f:
+                arith = json.loads(f.read())[stage][kernel]['ai']
+                data_ai[param['degree']] = arith
+
+        for deg, arith in data_ai.items():
+            ax.plot([arith, arith], [1000, min(arith*max_bw, max_perf)], 'k:')
+            plt.annotate("DG-%d" % deg, xy=(arith, 1.e4), xytext=(3, 3),
+                         textcoords='offset points', size=12, rotation=-90)
+
+        for (deg, opt), flops in data_flops.items():
+            ax.plot(data_ai[deg], flops, color='k', marker=self.marker[opt-2],
+                    label='Coffee-O%d' % opt if deg == 2 else None)
+
+        ax.set_xlim(ai_x[0], ai_x[-1])
+        ax.set_xticks(ai_x)
+        ax.set_xticklabels(ai_x)
+        ax.set_xlabel('Arithmetic intensity (Flops/Byte)')
+        yvals = 2 ** np.linspace(2, 10, 9, dtype=np.int32) * 1000
+        ax.set_ylim(yvals[0], yvals[-1])
+        ax.set_yticks(yvals)
+        ax.set_yticklabels(yvals / 1000)
+        ax.set_ylabel('Performance (GFlops/s)')
+        ax.legend(loc='best', fancybox=True, fontsize=10, title='Optimisation level')
         fig.savefig(path.join(self.plotdir, figname),
                     orientation='landscape', format='pdf',
                     transparent=True, bbox_inches='tight')
@@ -171,5 +216,24 @@ if __name__ == '__main__':
             stream_log = path.join(env['PETSC_DIR'], 'src/benchmarks/streams/scaling.log')
         max_bw = bandwidth_from_petsc_stream(stream_log)
 
+        series = [('np', nprocs), ('dim', [args.dim]), ('size', args.size),
+                  ('degree', args.degree), ('dt', args.dt), ('T', args.time),
+                  ('solver', args.solver), ('opt', args.opt)]
+
         # Max BW in MB/s; max perf in MFlops/s
-        b.plot_roofline_kernel(args.max_perf, max_bw)
+        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh1',
+                               kernel='form0_cell_integral_otherwise', label='sh1-cell')
+        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh1',
+                               kernel='form0_interior_facet_integral_otherwise', label='sh1-interior')
+        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh1',
+                               kernel='form0_exterior_facet_integral_otherwise', label='sh1-exterior')
+        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh2',
+                               kernel='form0_cell_integral_otherwise', label='sh2-cell')
+        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh2',
+                               kernel='form0_interior_facet_integral_otherwise', label='sh2-interior')
+        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh2',
+                               kernel='form0_exterior_facet_integral_otherwise', label='sh2-exterior')
+        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='uh1',
+                               kernel='form0_cell_integral_otherwise', label='uh1-cell')
+        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='uh1',
+                               kernel='form0_interior_facet_integral_otherwise', label='uh1-interior')

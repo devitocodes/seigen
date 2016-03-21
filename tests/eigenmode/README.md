@@ -57,3 +57,19 @@ First get stream results via PETSc:
 cd $PETSC_DIR/src/benchmarks/streams
 make stream NPMAX=<NP> MPI_BINDING="--bysocket --bind-to-socket"
 ```
+
+Run on cluster:
+```
+for DEG in 1 2 3 4; do
+    for OPT in 2 3 4; do
+        <mpiexec> -n <NP> python eigenmode_bench.py -b -l -s -- dim=2 solver=explicit opt=$OPT T=0.1 degree=$DEG N=128 dt=0.01;
+    done
+done
+```
+
+Compute max performance as `max_perf = <SIMD> * cores * core
+frequency`, where `<SIMD>` is the number of simultaneous `double` flops
+executed in a single cycle. Finally plot the rooflines with:
+```
+python eigenmode_plot.py roofline -i <arch>/results -o <arch>/plots --stream <PETSC>/scaling.log --max-perf 435200 -p 16 --dim 2 -N 128 --degree 1 2 3 4 --opt 2 3 -T 0.1 --dt 0.01
+```
