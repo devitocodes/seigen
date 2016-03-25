@@ -100,6 +100,7 @@ class ElasticLF4(object):
             # Caches
             self.asts = {}
             self.mass_cache = os.path.join("/data", "cache", platform)
+            self.nocache = tiling['nocache']
 
         if self.output:
             with timed_region('i/o'):
@@ -179,11 +180,14 @@ class ElasticLF4(object):
             for i, m in enumerate(submats):
                self.velocity_mass_asdat.data[i] = m[:, :].flatten()
             # Store...
-            if op2.MPI.comm.rank == 0 and not os.path.exists(os.path.dirname(U_filename)):
-                os.makedirs(os.path.dirname(U_filename))
-            op2.MPI.comm.barrier()
-            self.velocity_mass_asdat.save(U_filename)
-            print "Stored velocity mass matrix into", U_filename
+            if self.nocache:
+                print "Computed velocity mass matrix"
+            else:
+                if op2.MPI.comm.rank == 0 and not os.path.exists(os.path.dirname(U_filename)):
+                    os.makedirs(os.path.dirname(U_filename))
+                op2.MPI.comm.barrier()
+                self.velocity_mass_asdat.save(U_filename)
+                print "Stored velocity mass matrix into", U_filename
 
         # Copy the stress mass matrix into a Dat
         smat = self.imass_stress.handle
@@ -204,11 +208,14 @@ class ElasticLF4(object):
             for i, m in enumerate(submats):
                self.stress_mass_asdat.data[i] = m[:, :].flatten()
             # Store...
-            if op2.MPI.comm.rank == 0 and not os.path.exists(os.path.dirname(S_filename)):
-                os.makedirs(os.path.dirname(S_filename))
-            op2.MPI.comm.barrier()
-            self.stress_mass_asdat.save(S_filename)
-            print "Stored stress mass matrix into", S_filename
+            if self.nocache:
+                print "Computed stress mass matrix"
+            else:
+                if op2.MPI.comm.rank == 0 and not os.path.exists(os.path.dirname(S_filename)):
+                    os.makedirs(os.path.dirname(S_filename))
+                op2.MPI.comm.barrier()
+                self.stress_mass_asdat.save(S_filename)
+                print "Stored stress mass matrix into", S_filename
 
     @property
     def form_uh1(self):
@@ -602,7 +609,7 @@ if __name__ == '__main__':
 
     # Parse the input
     args = parser(profile=False, check=False, time_max=2.5, h=2.5, cn=0.05,
-                  flatten=False)
+                  flatten=False, nocache=False)
     profile = args.profile
     check = args.check
     mesh_size = args.mesh_size
@@ -618,7 +625,8 @@ if __name__ == '__main__':
         'extra_halo': args.extra_halo,
         'split_mode': args.split_mode,
         'split_explicit': eval(args.split_explicit) if args.split_explicit else None,
-        'log': args.log
+        'log': args.log,
+        'nocache': args.nocache
     }
 
     # Is it just a run to check correctness?
