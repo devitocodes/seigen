@@ -30,6 +30,7 @@ class EigenmodeBench(Benchmark):
         self.series['solver'] = solver
         self.series['opt'] = opt
         self.series['degree'] = degree
+        self.series['dt'] = dt
 
         # Start PETSc performance logging
         PETSc.Log().begin()
@@ -38,7 +39,6 @@ class EigenmodeBench(Benchmark):
         if dt < 0:
             # Courant number of 0.5: (dx*C)/Vp
             dt = 0.5*(1.0/N)/(2.0**(degree-1))
-        self.series['dt'] = dt
 
         parameters["coffee"]["O3"] = opt >= 3
         parameters["coffee"]["O4"] = opt >= 4
