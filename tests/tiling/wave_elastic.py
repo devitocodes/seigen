@@ -403,6 +403,7 @@ class ElasticLF4(object):
         self.assemble_inverse_mass()
         end = time()
         print "DONE! (Elapsed: ", round(end - start, 3), "s )"
+        op2.MPI.comm.barrier()
         print "Copying inverse mass matrix into a dat..."
         start = time()
         self.copy_massmatrix_into_dat()
@@ -414,7 +415,7 @@ class ElasticLF4(object):
         t = self.dt
         timestep = 0
         while t <= T + 1e-12:
-            if timestep % self.output == 0:
+            if op2.MPI.comm.rank == 0 and timestep % self.output == 0:
                 print "t = %f, (timestep = %d)" % (t, timestep)
             with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf,
                             mode=self.tiling_mode, extra_halo=self.tiling_halo,
