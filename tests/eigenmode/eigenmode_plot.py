@@ -112,37 +112,44 @@ class EigenmodePlot(EigenmodeBench):
         perf = np.insert(perf, idx, max_perf)
         ax.loglog(ai, perf, 'k-')
 
-        data_ai = {}
-        data_flops = {}
+        if isinstance(kernel, basestring):
+            kernel = [kernel]
+        data_ai = defaultdict(dict)
+        data_flops = defaultdict(dict)
         skeys, svals = zip(*sorted(series))
         for svalues in product(*svals):
             suff = '_'.join('%s%s' % (k, v) for k, v in zip(skeys, svalues))
             fpath = path.join(self.resultsdir, '%s_%s' % (self.name, suff))
             param = dict(zip(skeys, svalues))
 
-            # Get Flops measurements from petsc log files
-            petsc_res = {}
-            execfile('%s_petsc.py' % fpath, globals(), petsc_res)
-            flops = [petsc_res['Stages'][stage][kernel][p]['flops']
-                     for p in range(petsc_res['numProcs'])]
-            time = [petsc_res['Stages'][stage][kernel][p]['time']
-                    for p in range(petsc_res['numProcs'])]
-            flops_s = sum(flops) / max(time) / 1.e6  # 1024 ** 2
-            data_flops[(param['degree'], param['opt'])] = flops_s
+            for knl in kernel:
+                # Get Flops measurements from petsc log files
+                petsc_res = {}
+                execfile('%s_petsc.py' % fpath, globals(), petsc_res)
+                flops = [petsc_res['Stages'][stage][knl][p]['flops']
+                         for p in range(petsc_res['numProcs'])]
+                time = [petsc_res['Stages'][stage][knl][p]['time']
+                        for p in range(petsc_res['numProcs'])]
+                flops_s = sum(flops) / max(time) / 1.e6  # 1024 ** 2
+                data_flops[knl][(param['degree'], param['opt'])] = flops_s
 
-            # Get arithmetic intensity from parloop calculations
-            with open('%s_seigen.json' % fpath, 'r') as f:
-                arith = json.loads(f.read())[stage][kernel]['ai']
-                data_ai[param['degree']] = arith
+                # Get arithmetic intensity from parloop calculations
+                with open('%s_seigen.json' % fpath, 'r') as f:
+                    arith = json.loads(f.read())[stage][knl]['ai']
+                    data_ai[knl][param['degree']] = arith
 
-        for deg, arith in data_ai.items():
-            ax.plot([arith, arith], [1000, min(arith*max_bw, max_perf)], 'k:')
-            plt.annotate("DG-%d" % deg, xy=(arith, 1.e4), xytext=(3, 3),
-                         textcoords='offset points', size=12, rotation=-90)
+        k_meta = {'form0_cell_integral_otherwise': ('Cell integral', 'r', 'o'),
+                  'form0_interior_facet_integral_otherwise': ('Interior facet integral', 'b', '^')}
+        for knl in kernel:
+            meta = k_meta[knl]
+            for deg, arith in data_ai[knl].items():
+                ax.plot([arith, arith], [1000, min(arith*max_bw, max_perf)], '%s:' % meta[1])
+                plt.annotate("DG-%d" % deg, xy=(arith, 1.e4), xytext=(3, 3),
+                             textcoords='offset points', size=12, rotation=-90)
 
-        for (deg, opt), flops in data_flops.items():
-            ax.plot(data_ai[deg], flops, color='k', marker=self.marker[opt-2],
-                    label='Coffee-O%d' % opt if deg == 2 else None)
+            for (deg, opt), flops in data_flops[knl].items():
+                ax.plot(data_ai[knl][deg], flops, '%s%s:' % (meta[1], meta[2]),
+                        label='%s (%s)' % (meta[0], stage) if deg == 2 else None)
 
         ax.set_xlim(ai_x[0], ai_x[-1])
         ax.set_xticks(ai_x)
@@ -153,8 +160,8 @@ class EigenmodePlot(EigenmodeBench):
         ax.set_yticks(yvals)
         ax.set_yticklabels(yvals / 1000)
         ax.set_ylabel('Performance (GFlops/s)')
-        ax.legend(loc='best', fancybox=True, fontsize=10, title='Optimisation level')
-        fig.savefig(path.join(self.plotdir, figname),
+        ax.legend(loc='best', fancybox=True, fontsize=10)
+        fig.savefig(path.join(self.plotdir, figname), facecolor='white',
                     orientation='landscape', format='pdf',
                     transparent=True, bbox_inches='tight')
 
@@ -235,19 +242,21 @@ if __name__ == '__main__':
                   ('solver', args.solver), ('opt', args.opt)]
 
         # Max BW in MB/s; max perf in MFlops/s
+        kernels = ['form0_cell_integral_otherwise', 'form0_interior_facet_integral_otherwise']
         b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh1',
-                               kernel='form0_cell_integral_otherwise', label='sh1-cell')
-        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh1',
-                               kernel='form0_interior_facet_integral_otherwise', label='sh1-interior')
-        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh1',
-                               kernel='form0_exterior_facet_integral_otherwise', label='sh1-exterior')
+                               kernel=kernels, label='sh1-cell-intfac')
         b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh2',
-                               kernel='form0_cell_integral_otherwise', label='sh2-cell')
-        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh2',
-                               kernel='form0_interior_facet_integral_otherwise', label='sh2-interior')
-        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh2',
-                               kernel='form0_exterior_facet_integral_otherwise', label='sh2-exterior')
+                               kernel=kernels, label='sh2-cell-intfac')
+        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='utemp',
+                               kernel=kernels, label='utemp-cell-intfac')
+        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='s1',
+                               kernel='form0_cell_integral_otherwise', label='s1-cell')
+
         b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='uh1',
-                               kernel='form0_cell_integral_otherwise', label='uh1-cell')
-        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='uh1',
-                               kernel='form0_interior_facet_integral_otherwise', label='uh1-interior')
+                               kernel=kernels, label='uh1-cell-intfac')
+        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='uh2',
+                               kernel=kernels, label='uh2-cell-intfac')
+        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='stemp',
+                               kernel=kernels, label='stemp-cell-intfac')
+        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='u1',
+                               kernel='form0_cell_integral_otherwise', label='u1-cell')
