@@ -4,10 +4,14 @@ from itertools import product
 from collections import defaultdict
 from operator import itemgetter
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
 from os import path
 from os import environ as env
 import numpy as np
 import json
+
+
+rcParams.update({'font.size': 10})
 
 
 def bandwidth_from_petsc_stream(logfile):
@@ -23,7 +27,7 @@ def bandwidth_from_petsc_stream(logfile):
 
 
 class EigenmodePlot(EigenmodeBench):
-    figsize = (6, 4)
+    figsize = (8, 4)
     marker = ['D', 'o', '^', 'v']
 
     def plot_strong_scaling(self, nprocs, regions):
@@ -69,17 +73,27 @@ class EigenmodePlot(EigenmodeBench):
             spacing = [1. / N for N in sizes]
             if len(time) > 0:
                 ax.loglog(error, time, label='P%d-DG' % deg, linewidth=2,
-                          linestyle='solid', marker=self.marker[d-1])
-                for x, y, dx in zip(error, time, spacing):
-                    xy_off = (3, 3) if d < 4 else (-40, -6)
+                          linestyle='solid', marker=self.marker[deg-1])
+                for i, (x, y, dx) in enumerate(zip(error, time, spacing)):
+                    if i == 2:
+                        xy_off = (-8, 8)
+                    if i == 1:
+                        xy_off = (1, 5) if deg <= 2 else (-44, -5) if deg == 4 else (-3, 5)
+                    if i == 0:
+                        xy_off = (-20, -14) if deg == 1 or deg == 3 else \
+                                 (3, 3) if deg == 2 else (-44, -5)
                     plt.annotate("dx=%4.3f" % dx, xy=(x, y), xytext=xy_off,
                                  textcoords='offset points', size=8)
 
         # Manually add legend and axis labels
-        ax.legend(loc='best', ncol=2, fancybox=True, prop={'size': 12})
+        ax.legend(loc='best', ncol=4, fancybox=True, fontsize=10)
         ax.set_xlabel('%s error in L2 norm' % fieldname.capitalize())
+        yvals = 2 ** np.linspace(1, 5, 5, dtype=np.int32)
+        ax.set_ylim(yvals[0], yvals[-1])
+        ax.set_yticks(yvals)
+        ax.set_yticklabels(yvals)
         ax.set_ylabel('Wall time / seconds')
-        fig.savefig(path.join(self.plotdir, figname),
+        fig.savefig(path.join(self.plotdir, figname), facecolor='white',
                     orientation='landscape', format='pdf',
                     transparent=True, bbox_inches='tight')
 
