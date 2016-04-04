@@ -134,10 +134,10 @@ class EigenmodePlot(EigenmodeBench):
     def plot_roofline_kernel(self, max_perf, max_bw, series, stage, kernel, label=''):
         # Roofline for individual kernels
         figname = 'SeigenRoofline-%s.pdf' % label
-        fig = plt.figure(figname, figsize=self.figsize, dpi=300)
+        fig = plt.figure(figname, figsize=(5, 4), dpi=300)
         ax = fig.add_subplot(111)
 
-        ai_x = 2 ** np.linspace(-1, 6, 8)
+        ai_x = 2 ** np.linspace(-1, 4, 6)
         perf = ai_x * max_bw
         perf[perf > max_perf] = max_perf
         # Insert the crossover point between BW and flops limit
@@ -170,26 +170,27 @@ class EigenmodePlot(EigenmodeBench):
                 # Get arithmetic intensity from parloop calculations
                 with open('%s_seigen.json' % fpath, 'r') as f:
                     arith = json.loads(f.read())[stage][knl]['ai']
-                    data_ai[knl][param['degree']] = arith
+                    data_ai[knl][(param['degree'], param['opt'])] = arith
 
         k_meta = {'form0_cell_integral_otherwise': ('Cell integral', 'r', 'o'),
                   'form0_interior_facet_integral_otherwise': ('Interior facet integral', 'b', '^')}
         for knl in kernel:
             meta = k_meta[knl]
-            for deg, arith in data_ai[knl].items():
+            for (deg, opt), arith in data_ai[knl].items():
                 ax.plot([arith, arith], [1000, min(arith*max_bw, max_perf)], '%s:' % meta[1])
-                plt.annotate("DG-%d" % deg, xy=(arith, 1.e4), xytext=(3, 3),
-                             textcoords='offset points', size=12, rotation=-90)
+                plt.annotate('P%d-DG: %s' % (deg, 'Raw' if opt == 0 else 'Opt'),
+                             xy=(arith, 1.e4), xytext=(3, 60), rotation=-90,
+                             textcoords='offset points', size=12)
 
             for (deg, opt), flops in data_flops[knl].items():
-                ax.plot(data_ai[knl][deg], flops, '%s%s:' % (meta[1], meta[2]),
+                ax.plot(data_ai[knl][(deg, opt)], flops, '%s%s:' % (meta[1], meta[2]),
                         label='%s (%s)' % (meta[0], stage) if deg == 2 else None)
 
         ax.set_xlim(ai_x[0], ai_x[-1])
         ax.set_xticks(ai_x)
         ax.set_xticklabels(ai_x)
         ax.set_xlabel('Arithmetic intensity (Flops/Byte)')
-        yvals = 2 ** np.linspace(2, 10, 9, dtype=np.int32) * 1000
+        yvals = 2 ** np.linspace(3, 10, 8, dtype=np.int32) * 1000
         ax.set_ylim(yvals[0], yvals[-1])
         ax.set_yticks(yvals)
         ax.set_yticklabels(yvals / 1000)
@@ -265,6 +266,7 @@ if __name__ == '__main__':
         b.plot_error_cost(results, 'stress', 's_error')
 
     elif args.mode == 'roofline':
+        # Max BW in MB/s; max perf in MFlops/s
         if args.stream:
             stream_log = args.stream
         else:
@@ -274,9 +276,10 @@ if __name__ == '__main__':
         series = [('np', nprocs), ('dim', [args.dim]), ('size', args.size),
                   ('degree', args.degree), ('dt', args.dt), ('T', args.time),
                   ('solver', args.solver), ('opt', args.opt)]
-
-        # Max BW in MB/s; max perf in MFlops/s
         kernels = ['form0_cell_integral_otherwise', 'form0_interior_facet_integral_otherwise']
+
+        b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh1',
+                               kernel='form0_cell_integral_otherwise', label='sh1-cell')
         b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh1',
                                kernel=kernels, label='sh1-cell-intfac')
         b.plot_roofline_kernel(args.max_perf, max_bw, series, stage='sh2',
