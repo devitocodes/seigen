@@ -30,6 +30,16 @@ class EigenmodePlot(EigenmodeBench):
     figsize = (8, 4)
     marker = ['D', 'o', '^', 'v']
 
+    def parameter_sweep(self, series):
+        files = []
+        params = []
+        skeys, svals = zip(*sorted(series))
+        for svalues in product(*svals):
+            suff = '_'.join('%s%s' % (k, v) for k, v in zip(skeys, svalues))
+            files += [path.join(self.resultsdir, '%s_%s' % (self.name, suff))]
+            params += [dict(zip(skeys, svalues))]
+        return zip(files, params)
+
     def plot_strong_scaling(self, nprocs, regions):
         groups = ['solver', 'opt']
         xlabel = 'Number of processors'
@@ -49,16 +59,40 @@ class EigenmodePlot(EigenmodeBench):
                   groups=groups, regions=regions, kinds='semilogx', axis='tight',
                   title='', labels=labels, transform=efficiency, ymin=0)
 
-    def plot_comparison(self, degrees, regions):
-        groups = ['solver', 'opt']
+    def plot_comparison(self, series, stage, kernel, label=''):
+        figname = 'SeigenCompare-%s.pdf' % label
+        fig = plt.figure(figname, figsize=(2, 4), dpi=300)
+        ax = fig.add_subplot(111)
+
+        params = dict(series)
+        data_time = {}
+        for fpath, param in self.parameter_sweep(series):
+            petsc_res = {}
+            execfile('%s_petsc.py' % fpath, globals(), petsc_res)
+            time = max([petsc_res['Stages'][stage][kernel][p]['time']
+                        for p in range(petsc_res['numProcs'])])
+            data_time[(param['degree'], param['opt'])] = time
+
+        offset = np.arange(len(params['degree'])) + 0.1
+        w = 0.8 / len(params['opt'])
+        for i, opt in enumerate(params['opt']):
+            data_opt = [data_time[(d, opt)] for d in params['degree']]
+            ax.bar(offset + i * w, data_opt, w, color='steelblue',
+                   label='Raw' if opt == 0 else 'Opt',
+                   hatch='' if opt == 0 else '/', log=True)
+
+        ax.set_xticks(offset + len(params['opt']) * w / 2)
+        ax.set_xticklabels(['P%d-DG' % d for d in params['degree']])
+        yvals = 2 ** np.linspace(-5, 4, 10)
+        ax.set_ylim(yvals[0], yvals[-1])
+        ax.set_yticks(yvals)
+        ax.set_yticklabels(yvals)
+        ax.set_ylabel('Wall time / seconds')
         degree_str = ['P%s-DG' % d for d in degrees]
-        # Bar comparison between solver modes and coffee parameters
-        for region in regions:
-            self.plot(figsize=b.figsize, format='pdf', figname='SeigenCompare_%s' % region,
-                      xaxis='degree', xvals=degrees, xticklabels=degree_str,
-                      xlabel='Spatial discretisation', groups=groups, regions=[region],
-                      kinds='bar', title='Performance: %s' % region, labels=labels,
-                      legend={'loc': 'best'})
+        ax.legend(loc='best', ncol=1, fancybox=True, fontsize=10)
+        fig.savefig(path.join(self.plotdir, figname), facecolor='white',
+                    orientation='portrait', format='pdf',
+                    transparent=True, bbox_inches='tight')
 
     def plot_error_cost(self, results, fieldname, errname):
         # Plot error-cost diagram for velocity by hand
