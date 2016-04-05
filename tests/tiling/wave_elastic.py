@@ -532,7 +532,7 @@ class ExplosiveSourceLF4():
             tiling['s_depth'] = s_depth
 
             mesh.topology.init(**kwargs)
-            slope(mesh, debug=False)
+            slope(mesh, debug=True)
 
             # Instantiate the model ...
             self.elastic = ElasticLF4(mesh, "DG", poly_order, dimension=2, output=output, tiling=tiling)
