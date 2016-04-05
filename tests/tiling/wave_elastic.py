@@ -96,20 +96,30 @@ class ElasticLF4(object):
             self.tiling_explicit = tiling['split_explicit']
             self.tiling_log = tiling['log']
             self.tiling_sdepth = tiling['s_depth']
+            self.tiling_part = tiling['partitioning']
 
             # Caches
             self.asts = {}
-            self.mass_cache = os.path.join("/data", "cache", platform)
+            self.mass_cache = os.path.join("/", "data", "cache")
             self.nocache = tiling['nocache']
 
         if self.output:
             with timed_region('i/o'):
                 # File output streams
-                base = os.path.join('/data', 'output', platform,
+                base = os.path.join('/', 'data', 'output', platform,
                                     'p%d' % self.degree, 'uf%d' % self.tiling_uf)
-                if op2.MPI.comm.rank == 0 and not os.path.exists(os.path.dirname(base)):
-                    os.makedirs(os.path.dirname(base))
+                if op2.MPI.comm.rank == 0:
+                    if not os.path.exists(base):
+                        os.makedirs(base)
+                    sub_dirs = [d for d in os.listdir(base)
+                                if os.path.isdir(os.path.join(base, d))]
+                    sub_dir = "%d_part%s_tile%s" % (len(sub_dirs),
+                                                    self.tiling_size if self.tiling_uf else 0,
+                                                    self.tiling_part if self.tiling_uf else 'None')
+                    base = os.path.join(base, sub_dir)
+                    os.makedirs(base)
                 op2.MPI.comm.barrier()
+                base = op2.MPI.comm.bcast(base, root=0)
                 self.u_stream = File(os.path.join(base, 'velocity.pvd'))
                 self.s_stream = File(os.path.join(base, 'stress.pvd'))
 
@@ -394,7 +404,9 @@ class ElasticLF4(object):
         :param float T: The finish time of the simulation.
         :returns: The final solution fields for velocity and stress.
         """
-        self.write(self.u1, self.s1)  # Write out the initial condition.
+
+        # Write out the initial condition.
+        self.write(self.u1, self.s1)
 
         print "Generating inverse mass matrix"
         # Pre-assemble the inverse mass matrices, which should stay
@@ -448,6 +460,10 @@ class ElasticLF4(object):
             # Move onto next timestep
             t += self.dt
             timestep += 1
+
+        # Write out the final state of the fields
+        self.write(self.u1, self.s1)
+
         end = time()
 
         return start, end, self.u1, self.s1
