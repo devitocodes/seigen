@@ -177,11 +177,16 @@ class ElasticLF4(object):
         self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
         U_filename = os.path.join(filename, 'U', 'p%d' % self.degree, 'totdofs%d' % self.U_tot_dofs,
                                   "ndofs%d_rank%d" % (self.U.dof_count, op2.MPI.comm.rank))
-        try:
-            self.velocity_mass_asdat.load(U_filename)
-            print "Loaded velocity mass matrix from", U_filename
-            op2.MPI.comm.barrier()
-        except:
+        loaded = False
+        if not self.nocache:
+            try:
+                self.velocity_mass_asdat.load(U_filename)
+                print "Loaded velocity mass matrix from", U_filename
+                loaded = True
+            except:
+                pass
+        op2.MPI.comm.barrier()
+        if not loaded:
             istart, iend = vmat.getOwnershipRange()
             idxs = [ PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
                                               comm=PETSc.COMM_SELF)
@@ -205,11 +210,16 @@ class ElasticLF4(object):
         self.stress_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
         S_filename = os.path.join(filename, 'S', 'p%d' % self.degree, 'totdofs%d' % self.S_tot_dofs,
                                   "ndofs%d_rank%d" % (self.S.dof_count, op2.MPI.comm.rank))
-        try:
-            self.stress_mass_asdat.load(S_filename)
-            print "Loaded stress mass matrix from", S_filename
-            op2.MPI.comm.barrier()
-        except:
+        loaded = False
+        if not self.nocache:
+            try:
+                self.stress_mass_asdat.load(S_filename)
+                print "Loaded stress mass matrix from", S_filename
+                loaded = True
+            except:
+                pass
+        op2.MPI.comm.barrier()
+        if not loaded:
             istart, iend = smat.getOwnershipRange()
             idxs = [ PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
                                               comm=PETSc.COMM_SELF)
