@@ -97,6 +97,7 @@ class ElasticLF4(object):
             self.tiling_log = tiling['log']
             self.tiling_sdepth = tiling['s_depth']
             self.tiling_part = tiling['partitioning']
+            self.tiling_glb_maps = tiling['use_glb_maps']
 
             # Caches
             self.asts = {}
@@ -442,7 +443,7 @@ class ElasticLF4(object):
             with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf,
                             mode=self.tiling_mode, extra_halo=self.tiling_halo,
                             split_mode=self.tiling_split, explicit=self.tiling_explicit,
-                            log=self.tiling_log):
+                            log=self.tiling_log, use_glb_maps=self.tiling_glb_maps):
                 # In case the source is time-dependent, update the time 't' here.
                 if(self.source):
                     with timed_region('source term update'):
@@ -536,6 +537,7 @@ class ExplosiveSourceLF4():
         extra_halo = tiling['extra_halo']
         part_mode = tiling['partitioning']
         split_mode = tiling['split_mode']
+        glb_maps = tiling['use_glb_maps']
         fusion_mode = tiling['mode']
 
         with timed_region('mesh generation'):
@@ -618,6 +620,7 @@ class ExplosiveSourceLF4():
                     tile_size=tile_size,
                     extra_halo=extra_halo,
                     split_mode=split_mode,
+                    glb_maps=glb_maps,
                     poly_order=poly_order,
                     domain=os.path.splitext(os.path.basename(mesh.name))[0])
         if op2.MPI.comm.rank == 0:
@@ -652,8 +655,9 @@ if __name__ == '__main__':
         'extra_halo': args.extra_halo,
         'split_mode': args.split_mode,
         'split_explicit': eval(args.split_explicit) if args.split_explicit else None,
+        'use_glb_maps': eval(args.glb_maps) if args.glb_maps else False,
         'log': args.log,
-        'nocache': args.nocache
+        'nocache': eval(args.nocache) if args.nocache else False
     }
 
     # Is it just a run to check correctness?
