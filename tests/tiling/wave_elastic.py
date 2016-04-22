@@ -97,6 +97,7 @@ class ElasticLF4(object):
             self.tiling_log = tiling['log']
             self.tiling_sdepth = tiling['s_depth']
             self.tiling_part = tiling['partitioning']
+            self.tiling_coloring = tiling['coloring']
             self.tiling_glb_maps = tiling['use_glb_maps']
 
             # Caches
@@ -443,7 +444,8 @@ class ElasticLF4(object):
             with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf,
                             mode=self.tiling_mode, extra_halo=self.tiling_halo,
                             split_mode=self.tiling_split, explicit=self.tiling_explicit,
-                            log=self.tiling_log, use_glb_maps=self.tiling_glb_maps):
+                            log=self.tiling_log, use_glb_maps=self.tiling_glb_maps,
+                            coloring=self.tiling_coloring):
                 # In case the source is time-dependent, update the time 't' here.
                 if(self.source):
                     with timed_region('source term update'):
@@ -652,6 +654,7 @@ if __name__ == '__main__':
         'tile_size': args.tile_size,
         'mode': args.fusion_mode,
         'partitioning': args.part_mode,
+        'coloring': args.coloring,
         'extra_halo': args.extra_halo,
         'split_mode': args.split_mode,
         'split_explicit': eval(args.split_explicit) if args.split_explicit else None,
