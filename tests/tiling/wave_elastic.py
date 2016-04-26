@@ -99,6 +99,7 @@ class ElasticLF4(object):
             self.tiling_part = tiling['partitioning']
             self.tiling_coloring = tiling['coloring']
             self.tiling_glb_maps = tiling['use_glb_maps']
+            self.tiling_prefetch = tiling['use_prefetch']
 
             # Caches
             self.asts = {}
@@ -445,7 +446,7 @@ class ElasticLF4(object):
                             mode=self.tiling_mode, extra_halo=self.tiling_halo,
                             split_mode=self.tiling_split, explicit=self.tiling_explicit,
                             log=self.tiling_log, use_glb_maps=self.tiling_glb_maps,
-                            coloring=self.tiling_coloring):
+                            use_prefetch=self.tiling_prefetch, coloring=self.tiling_coloring):
                 # In case the source is time-dependent, update the time 't' here.
                 if(self.source):
                     with timed_region('source term update'):
@@ -540,6 +541,8 @@ class ExplosiveSourceLF4():
         part_mode = tiling['partitioning']
         split_mode = tiling['split_mode']
         glb_maps = tiling['use_glb_maps']
+        prefetch = tiling['use_prefetch']
+        coloring = tiling['coloring']
         fusion_mode = tiling['mode']
 
         with timed_region('mesh generation'):
@@ -623,6 +626,8 @@ class ExplosiveSourceLF4():
                     extra_halo=extra_halo,
                     split_mode=split_mode,
                     glb_maps=glb_maps,
+                    prefetch=prefetch,
+                    coloring=coloring,
                     poly_order=poly_order,
                     domain=os.path.splitext(os.path.basename(mesh.name))[0])
         if op2.MPI.comm.rank == 0:
@@ -659,6 +664,7 @@ if __name__ == '__main__':
         'split_mode': args.split_mode,
         'split_explicit': eval(args.split_explicit) if args.split_explicit else None,
         'use_glb_maps': eval(args.glb_maps) if args.glb_maps else False,
+        'use_prefetch': eval(args.prefetch) if args.prefetch else False,
         'log': args.log,
         'nocache': eval(args.nocache) if args.nocache else False
     }
