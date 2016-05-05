@@ -93,7 +93,7 @@ class ElasticLF4(object):
             self.tiling_mode = tiling['mode']
             self.tiling_halo = tiling['extra_halo']
             self.tiling_split = tiling['split_mode']
-            self.tiling_explicit = tiling['split_explicit']
+            self.tiling_explicit = tiling['explicit_mode']
             self.tiling_log = tiling['log']
             self.tiling_sdepth = tiling['s_depth']
             self.tiling_part = tiling['partitioning']
@@ -531,6 +531,12 @@ def cfl_dt(dx, Vp, courant_number):
 
 class ExplosiveSourceLF4():
 
+    EXPLICIT_MODES = {
+        0: [(0, 12, 300), (13, 25, 300)],
+        1: [(1, 2, 1000), (4, 6, 1000), (8, 9, 1000), (10, 12, 500),
+            (13, 15, 1000), (17, 18, 1000), (20, 22, 1000), (23, 25, 250)]
+    }
+
     def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, cn=0.05,
                              mesh_file=None, output=1, poly_order=2, tiling=None):
 
@@ -539,11 +545,16 @@ class ExplosiveSourceLF4():
         num_unroll = tiling['num_unroll']
         extra_halo = tiling['extra_halo']
         part_mode = tiling['partitioning']
-        split_mode = tiling['split_mode']
         glb_maps = tiling['use_glb_maps']
         prefetch = tiling['use_prefetch']
         coloring = tiling['coloring']
         fusion_mode = tiling['mode']
+
+        # Set a suitable tiling mode
+        split_mode = tiling['split_mode']
+        explicit_mode = tiling['explicit_mode']
+        if explicit_mode in self.EXPLICIT_MODES:
+            tiling['explicit_mode'] = self.EXPLICIT_MODES[explicit_mode]
 
         with timed_region('mesh generation'):
             # Get a mesh ...
@@ -625,6 +636,7 @@ class ExplosiveSourceLF4():
                     tile_size=tile_size,
                     extra_halo=extra_halo,
                     split_mode=split_mode,
+                    explicit_mode=explicit_mode,
                     glb_maps=glb_maps,
                     prefetch=prefetch,
                     coloring=coloring,
@@ -662,7 +674,7 @@ if __name__ == '__main__':
         'coloring': args.coloring,
         'extra_halo': args.extra_halo,
         'split_mode': args.split_mode,
-        'split_explicit': eval(args.split_explicit) if args.split_explicit else None,
+        'explicit_mode': args.explicit_mode,
         'use_glb_maps': eval(args.glb_maps) if args.glb_maps else False,
         'use_prefetch': eval(args.prefetch) if args.prefetch else False,
         'log': args.log,
