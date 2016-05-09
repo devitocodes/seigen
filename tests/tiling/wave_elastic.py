@@ -531,10 +531,12 @@ def cfl_dt(dx, Vp, courant_number):
 
 class ExplosiveSourceLF4():
 
+    # (num_solves, [(first_loop_index, last_loop_index, tile_size)])
     EXPLICIT_MODES = {
-        0: [(0, 12, 300), (13, 25, 300)],
-        1: [(1, 2, 1000), (4, 6, 1000), (8, 9, 1000), (10, 12, 500),
-            (13, 15, 1000), (17, 18, 1000), (20, 22, 1000), (23, 25, 250)]
+        0: (4, [(0, 12, 300), (13, 25, 300)]),
+        1: (1, [(1, 2, 1000), (4, 6, 1000), (8, 9, 1000), (10, 12, 500),
+            (13, 15, 1000), (17, 18, 1000), (20, 22, 1000), (23, 25, 250)]),
+        2: (1, [(1, 2, 1000)])
     }
 
     def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, cn=0.05,
@@ -554,7 +556,7 @@ class ExplosiveSourceLF4():
         split_mode = tiling['split_mode']
         explicit_mode = tiling['explicit_mode']
         if explicit_mode in self.EXPLICIT_MODES:
-            tiling['explicit_mode'] = self.EXPLICIT_MODES[explicit_mode]
+            tiling['explicit_mode'] = self.EXPLICIT_MODES[explicit_mode][1]
 
         with timed_region('mesh generation'):
             # Get a mesh ...
@@ -566,7 +568,9 @@ class ExplosiveSourceLF4():
                 s_depth = 1
             else:
                 num_solves = ElasticLF4.num_solves
-                if split_mode > 0 and split_mode < num_solves:
+                if explicit_mode in self.EXPLICIT_MODES:
+                    num_solves = self.EXPLICIT_MODES[explicit_mode][0]
+                elif split_mode > 0 and split_mode < num_solves:
                     num_solves = split_mode
                 s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
                 if part_mode == 'metis':
