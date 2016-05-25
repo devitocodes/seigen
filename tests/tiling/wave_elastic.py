@@ -106,7 +106,7 @@ class ElasticLF4(object):
 
             # Caches
             self.asts = {}
-            self.mass_cache = os.path.join("/", "data", "cache")
+            self.mass_cache = os.path.join("/", "work", "fl1612", "cache")
             self.nocache = tiling['nocache']
 
             # AST cache
@@ -115,7 +115,7 @@ class ElasticLF4(object):
         if self.output:
             with timed_region('i/o'):
                 # File output streams
-                base = os.path.join('/', 'tmp', 'output', platform,
+                base = os.path.join('/', 'work', 'fl1612', 'output', platform,
                                     'p%d' % self.degree, 'uf%d' % self.tiling_uf)
                 if op2.MPI.comm.rank == 0:
                     if not os.path.exists(base):
