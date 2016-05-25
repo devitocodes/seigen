@@ -106,7 +106,7 @@ class ElasticLF4(object):
 
             # Caches
             self.asts = {}
-            self.mass_cache = os.path.join("/", "work", "fl1612", "cache")
+            self.mass_cache = os.path.join('/', 'work', 'fl1612', 'cache', platform)
             self.nocache = tiling['nocache']
 
             # AST cache
