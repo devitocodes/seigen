@@ -19,6 +19,9 @@ import os
 import platform
 platform = platform.node().split('.')[0]
 
+# CX1 hack
+sys.path.insert(0, '')
+
 from utils.benchmarking import parser, output_time
 from utils.tiling import calculate_sdepth
 
