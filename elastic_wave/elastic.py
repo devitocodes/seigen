@@ -356,7 +356,7 @@ class ImplicitElasticLF4(ElasticLF4):
         problem = LinearVariationalProblem(lhs(form), rhs(form), result)
         return LinearVariationalSolver(problem)
 
-    def solve(self, solver, *args):
+    def solve(self, solver, *args, **kwargs):
         solver.solve()
 
 
