@@ -297,7 +297,7 @@ class ElasticLF4(object):
                             self.source = self.source_expression
 
                     # Solve for the velocity vector field.
-                    with timed_region('velocity solve'):
+                    with PETSc.Log.Stage('velocity solve'):
                         self.solve(self.ctx_uh1, self.invmass_velocity, self.uh1, stage='uh1')
                         self.solve(self.ctx_stemp, self.invmass_stress, self.stemp, stage='stemp')
                         self.solve(self.ctx_uh2, self.invmass_velocity, self.uh2, stage='uh2')
@@ -306,7 +306,7 @@ class ElasticLF4(object):
                         _trace.evaluate_all()
 
                     # Solve for the stress tensor field.
-                    with timed_region('stress solve'):
+                    with PETSc.Log.Stage('stress solve'):
                         self.solve(self.ctx_sh1, self.invmass_stress, self.sh1, stage='sh1')
                         self.solve(self.ctx_utemp, self.invmass_velocity, self.utemp, stage='utemp')
                         self.solve(self.ctx_sh2, self.invmass_stress, self.sh2, stage='sh2')
