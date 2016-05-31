@@ -150,7 +150,8 @@ if __name__ == '__main__':
     from opescibench import Benchmark
     bench = Benchmark(name='EigenmodeBench')
     bench.add_parameter('--dim', type=int, default=2, help='Problem dimension')
-    bench.add_parameter_value('nprocs', op2.MPI.comm.size)
+    bench.add_parameter('--nprocs', type=int, default=op2.MPI.comm.size or 1,
+                        help='Number of parallel processes')
     bench.add_parameter('--size', type=int, nargs='+', default=[8],
                         help='Mesh size (number of edges per dimension)')
     bench.add_parameter('--time', type=float, nargs=1, default=5.0,
