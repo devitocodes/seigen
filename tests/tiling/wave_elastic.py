@@ -543,8 +543,10 @@ class FusionModes():
         2: (1, [(1, 2, 4), (8, 9, 4), (17, 18, 4)]),
         3: (1, [(1, 3, 4), (8, 10, 4), (17, 19, 4)]),
         4: (1, [(1, 2, 4), (4, 6, 4), (8, 9, 4), (10, 12, 2),
-            (13, 15, 4), (17, 18, 4), (20, 22, 4), (23, 25, 1)]),
-        5: (4, [(0, 12, 1), (13, 25, 1)])
+                (13, 15, 4), (17, 18, 4), (20, 22, 4), (23, 25, 1)]),
+        5: (1, [(1, 3, 4), (4, 7, 4), (8, 12, 2), (13, 16, 4), (17, 19, 4), (20, 25, 1)]),
+        6: (4, [(0, 12, 1), (13, 25, 1)]),
+        7: (8, [(0, 25, 1)])
     }
 
     @staticmethod
@@ -598,6 +600,7 @@ class ExplosiveSourceLF4():
 
             mesh.topology.init(**kwargs)
             slope(mesh, debug=False)
+            mesh._plex.view()
 
             # Instantiate the model ...
             self.elastic = ElasticLF4(mesh, "DG", poly_order, dimension=2, output=output, tiling=tiling)
