@@ -8,6 +8,7 @@ from os import path, getcwd
 import json
 import matplotlib.pyplot as plt
 import numpy as np
+from itertools import product
 
 parameters["pyop2_options"]["profiling"] = True
 parameters["coffee"]["O2"] = False
@@ -17,6 +18,10 @@ parameters["seigen"]["profiling"] = True
 petsc_stages = {'velocity solve': ['uh1', 'stemp', 'uh2', 'u1'],
                 'stress solve': ['sh1', 'utemp', 'sh2', 's1']}
 petsc_events = ['MatMult', 'ParLoopExecute']
+
+ploop_types = {'cell': 'form0_cell_integral_otherwise',
+               'intfac': 'form0_interior_facet_integral_otherwise',
+               'extfac': 'form0_exterior_facet_integral_otherwise'}
 
 class EigenmodeBench(Benchmark):
     warmups = 1
@@ -123,6 +128,7 @@ class EigenmodeExecutor(Executor):
         # Store meta data
         self.meta['dofs'] = op2.MPI.comm.allreduce(self.eigen.elastic.S.dof_count, op=mpi4py.MPI.SUM)
         self.meta['spacing'] = 1. / size
+        self.meta['kernel_profile'] = parameters['seigen']['profiling']
 
     def postprocess(self, **kwargs):
         """ Error estimates are compute intensive, so only run them once. """
@@ -157,6 +163,9 @@ if __name__ == '__main__':
                         help='Coffee optimisation level; default -O3')
     bench.add_parameter('--opt', type=int, nargs='+', default=[3],
                         help='Coffee optimisation level; default -O3')
+    # Additional arguments for plotting
+    bench.plotter.parser.add_argument('--kernel', type=str, nargs='+', default=['uh1'],
+                                      help='Name of kernels for roofline plots')
     bench.parse_args()
 
     if bench.args.mode == 'bench':
@@ -177,6 +186,27 @@ if __name__ == '__main__':
                     error[label] = bench.lookup(event=None, measure='%s_error' % field,
                                                 params={'degree': deg}, category='meta')
                 bench.plotter.plot_error_cost(figname, error, time)
+
+        elif bench.args.plottype == 'roofline':
+            for kernel in bench.args.kernel:
+                for pltype, plname in ploop_types.items():
+                    figname = 'SeigenRoofline_%s_%s.pdf' % (kernel, pltype)
+                    flops_s = {}
+                    op_int = {}
+                    for deg, opt in product(bench.args.degree, bench.args.opt):
+                        params = {'degree': deg, 'opt': opt}
+                        event = '%s:%s' % (kernel, plname)
+                        label = u'P%d$_{DG}$: %s' % (deg, 'Raw' if opt == 0 else 'Opt')
+                        profile = bench.lookup(params=params, measure='kernel_profile',
+                                               category='meta')[0][kernel]
+                        if plname in profile:
+                            time = bench.lookup(params=params, event=event, measure='time')
+                            flops = bench.lookup(params=params, event=event, measure='flops')
+                            assert(len(time) == 1 and len(flops) == 1)
+                            flops_s[label] = (flops[0] / 1.e6 / time[0])
+                            op_int[label] = profile[plname]['ai']
+                    if len(flops_s) > 0:
+                        bench.plotter.plot_roofline(figname, flops_s, op_int)
         else:
             raise NotImplementedErorr('Plot type %s not yet implemented' % plottype)
     else:
