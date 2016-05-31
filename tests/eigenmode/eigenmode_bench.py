@@ -179,10 +179,17 @@ if __name__ == '__main__':
                 figname = 'SeigenError_%s.pdf' % field
                 time = {}
                 error = {}
+                events = ['%s:summary' % s for s in petsc_stages['%s solve' % field]]
                 for deg in bench.args.degree:
                     label = u'P%d$_{DG}$' % deg
+                    # Annoyingly, nested stage:summary data is not accumulative,
+                    # so we need to sum across the relevant forms ourselves
                     time[label] = bench.lookup(event='%s solve:summary' % field,
                                                measure='time', params={'degree': deg})
+                    if bench.args.solver != 'implicit':
+                        for ev in events:
+                            time[label] += bench.lookup(event=ev, measure='time',
+                                                        params={'degree': deg})
                     error[label] = bench.lookup(event=None, measure='%s_error' % field,
                                                 params={'degree': deg}, category='meta')
                 bench.plotter.plot_error_cost(figname, error, time)
