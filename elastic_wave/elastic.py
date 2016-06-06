@@ -336,7 +336,7 @@ class ElasticLF4(object):
                                  for arg in pl.args])
                     meta[name]['bytes'] = mem_b
                     meta[name]['flops'] = pl.kernel.num_flops * pl.it_space.size
-                    meta[name]['ai'] = float(meta[name]['flops'] ) / mem_b
+                    meta[name]['ai'] = float(meta[name]['flops']) / mem_b
         return self.u1, self.s1
 
 
@@ -536,6 +536,7 @@ class TilingElasticLF4(ExplicitElasticLF4):
     def loop_context(self):
         r""" Inject pyop2.loop_chain context to facilitate fusion and tiling across kernels."""
         from pyop2.fusion import loop_chain
+
         @contextmanager
         def tiling_loop_context():
             with loop_chain("main1", tile_size=self.tile_size, num_unroll=self.num_unroll,
