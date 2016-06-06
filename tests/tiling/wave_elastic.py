@@ -116,9 +116,10 @@ class ElasticLF4(object):
                         os.makedirs(base)
                     sub_dirs = [d for d in os.listdir(base)
                                 if os.path.isdir(os.path.join(base, d))]
-                    sub_dir = "%d_part%s_tile%s" % (len(sub_dirs),
-                                                    self.tiling_size if self.tiling_uf else 0,
-                                                    self.tiling_part if self.tiling_uf else 'None')
+                    sub_dir = "%d_em%d_part%s_tile%s" % (len(sub_dirs),
+                                                         self.tiling_explicit if self.tiling_explicit else 0,
+                                                         self.tiling_size if self.tiling_uf else 0,
+                                                         self.tiling_part if self.tiling_uf else 'None')
                     base = os.path.join(base, sub_dir)
                     os.makedirs(base)
                 op2.MPI.comm.barrier()
@@ -533,20 +534,19 @@ class FusionModes():
 
     # (num_solves, [(first_loop_index, last_loop_index, tile_size_multiplier)])
     modes = {
-        1: (1, [(1, 2, 4)]),
-        2: (1, [(1, 2, 4), (8, 9, 4), (17, 18, 4)]),
-        3: (1, [(1, 3, 4), (8, 10, 4), (17, 19, 4)]),
-        4: (1, [(1, 2, 4), (4, 6, 4), (8, 9, 4), (10, 12, 2),
+        1: (1, [(1, 3, 4), (8, 10, 4), (17, 19, 4)]),
+        2: (1, [(1, 2, 4), (4, 6, 4), (8, 9, 4), (10, 12, 2),
                 (13, 15, 4), (17, 18, 4), (20, 22, 4), (23, 25, 1)]),
-        5: (1, [(1, 3, 4), (4, 7, 4), (8, 12, 2), (13, 16, 4), (17, 19, 4), (20, 25, 1)]),
-        6: (4, [(0, 12, 1), (13, 25, 1)]),
-        7: (8, [(0, 25, 1)])
+        3: (1, [(1, 3, 4), (4, 7, 4), (8, 12, 2), (13, 16, 4), (17, 19, 4), (20, 25, 1)]),
+        4: (2, [(1, 7, 1), (8, 16, 1),  (17, 25, 1)]),
+        5: (4, [(0, 12, 1), (13, 25, 1)]),
+        6: (8, [(0, 25, 1)])
     }
 
     @staticmethod
-    def get(mode, tile_size):
+    def get(mode, part_mode, tile_size):
         num_solves, mode = FusionModes.modes[mode]
-        mode = [(i, j, tile_size*k) for i, j, k in mode]
+        mode = [(i, j, tile_size*(k if part_mode == 'chunk' else 1)) for i, j, k in mode]
         return num_solves, mode
 
 
@@ -569,7 +569,7 @@ class ExplosiveSourceLF4():
         split_mode = tiling['split_mode']
         explicit_mode = tiling['explicit_mode']
         if explicit_mode:
-            tiling['explicit_mode'] = FusionModes.get(explicit_mode, tile_size)[1]
+            tiling['explicit_mode'] = FusionModes.get(explicit_mode, part_mode, tile_size)[1]
 
         with timed_region('mesh generation'):
             # Get a mesh ...
@@ -582,7 +582,7 @@ class ExplosiveSourceLF4():
             else:
                 num_solves = ElasticLF4.num_solves
                 if explicit_mode:
-                    num_solves = FusionModes.get(explicit_mode, tile_size)[0]
+                    num_solves = FusionModes.get(explicit_mode, part_mode, tile_size)[0]
                 elif split_mode > 0 and split_mode < num_solves:
                     num_solves = split_mode
                 s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
@@ -659,14 +659,6 @@ class ExplosiveSourceLF4():
                     coloring=coloring,
                     poly_order=poly_order,
                     domain=os.path.splitext(os.path.basename(mesh.name))[0])
-
-        import sys
-        for i in range(op2.MPI.comm.size):
-            if op2.MPI.comm.rank == i:
-                print "PRINTING SUMMARY FOR RANK", i
-                summary()
-                sys.stdout.flush()
-            op2.MPI.comm.barrier()
 
         return u1, s1
 
