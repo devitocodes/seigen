@@ -94,6 +94,7 @@ class ElasticLF4(object):
             self.tiling_halo = tiling['extra_halo']
             self.tiling_split = tiling['split_mode']
             self.tiling_explicit = tiling['explicit_mode']
+            self.tiling_explicit_id = tiling['explicit_mode_id']
             self.tiling_log = tiling['log']
             self.tiling_sdepth = tiling['s_depth']
             self.tiling_part = tiling['partitioning']
@@ -117,7 +118,7 @@ class ElasticLF4(object):
                     sub_dirs = [d for d in os.listdir(base)
                                 if os.path.isdir(os.path.join(base, d))]
                     sub_dir = "%d_em%d_part%s_tile%s" % (len(sub_dirs),
-                                                         self.tiling_explicit if self.tiling_explicit else 0,
+                                                         self.tiling_explicit_id if self.tiling_explicit_id else 0,
                                                          self.tiling_size if self.tiling_uf else 0,
                                                          self.tiling_part if self.tiling_uf else 'None')
                     base = os.path.join(base, sub_dir)
@@ -690,6 +691,7 @@ if __name__ == '__main__':
         'extra_halo': args.extra_halo,
         'split_mode': args.split_mode,
         'explicit_mode': args.explicit_mode,
+        'explicit_mode_id': args.explicit_mode,
         'use_glb_maps': eval(args.glb_maps) if args.glb_maps else False,
         'use_prefetch': eval(args.prefetch) if args.prefetch else False,
         'log': args.log,
