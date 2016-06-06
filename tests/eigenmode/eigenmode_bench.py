@@ -150,7 +150,7 @@ if __name__ == '__main__':
     from opescibench import Benchmark
     bench = Benchmark(name='EigenmodeBench')
     bench.add_parameter('--dim', type=int, default=2, help='Problem dimension')
-    bench.add_parameter('--nprocs', type=int, default=op2.MPI.comm.size or 1,
+    bench.add_parameter('--nprocs', type=int, nargs='+', default=[op2.MPI.comm.size] or [1],
                         help='Number of parallel processes')
     bench.add_parameter('--size', type=int, nargs='+', default=[8],
                         help='Mesh size (number of edges per dimension)')
@@ -175,7 +175,19 @@ if __name__ == '__main__':
         bench.save()
     elif bench.args.mode == 'plot':
         bench.load()
-        if bench.args.plottype == 'error':
+        if bench.args.plottype == 'strong':
+            for field in ['velocity', 'stress']:
+                figname = 'SeigenStrong_%s_%s.pdf' % (field, bench.args.solver)
+                time = bench.lookup(event='%s solve:summary' % field, measure='time')
+                events = ['%s:summary' % s for s in petsc_stages['%s solve' % field]]
+                if bench.args.solver != 'implicit':
+                    for ev in events:
+                        time += bench.lookup(event=ev, measure='time')
+                bench.plotter.plot_strong_scaling(figname, bench.args.nprocs, time)
+                figname = 'SeigenEfficiency_%s_%s.pdf' % (field, bench.args.solver)
+                bench.plotter.plot_efficiency(figname, bench.args.nprocs, time)
+
+        elif bench.args.plottype == 'error':
             for field in ['velocity', 'stress']:
                 figname = 'SeigenError_%s.pdf' % field
                 time = {}
