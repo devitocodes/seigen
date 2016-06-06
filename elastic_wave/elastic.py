@@ -326,20 +326,17 @@ class ElasticLF4(object):
             parameters['seigen']['profiling'] = {}
             for stage, trace in parameters['seigen']['trace'].items():
                 parameters['seigen']['profiling'][stage] = {}
+                meta = parameters['seigen']['profiling'][stage]
                 for pl in trace:
                     name = pl.kernel.name
                     if name == "copy":
                         continue
-                    parameters['seigen']['profiling'][stage][name] = {}
-                    mem_b = 0
-                    for arg in pl.args:
-                        mem = arg.data.cdim * arg.data.dtype.itemsize
-                        if arg.map:
-                            mem *= arg.map.arity
-                        mem_b += mem * 2 if arg.access._mode == "INC" else mem
-                    parameters['seigen']['profiling'][stage][name]['bytes'] = mem_b
-                    parameters['seigen']['profiling'][stage][name]['flops'] = pl.kernel.num_flops
-                    parameters['seigen']['profiling'][stage][name]['ai'] = float(pl.kernel.num_flops) / mem_b
+                    meta[name] = {}
+                    mem_b = sum([sum(arg.data.shape) * arg.data.dtype.itemsize
+                                 for arg in pl.args])
+                    meta[name]['bytes'] = mem_b
+                    meta[name]['flops'] = pl.kernel.num_flops * pl.it_space.size
+                    meta[name]['ai'] = float(meta[name]['flops'] ) / mem_b
         return self.u1, self.s1
 
 
