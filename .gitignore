@@ -4,3 +4,5 @@
 *.vtu
 *.pvtu
 *.dat
+*.json
+*.pdf
