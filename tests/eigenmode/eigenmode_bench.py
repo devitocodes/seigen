@@ -9,6 +9,7 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 from itertools import product
+from collections import OrderedDict
 
 parameters["pyop2_options"]["profiling"] = True
 parameters["coffee"]["O2"] = False
@@ -160,7 +161,7 @@ if __name__ == '__main__':
                         help='Timestep size in seconds; auto-derived if dt < 0.')
     bench.add_parameter('--degree', type=int, nargs='+', default=[1],
                         help='Degree of spatial discretisation')
-    bench.add_parameter('--solver', choices=('implicit', 'explicit'), default='explicit',
+    bench.add_parameter('--solver', choices=('implicit', 'explicit'), nargs='+', default='explicit',
                         help='Coffee optimisation level; default -O3')
     bench.add_parameter('--opt', type=int, nargs='+', default=[3],
                         help='Coffee optimisation level; default -O3')
@@ -176,36 +177,43 @@ if __name__ == '__main__':
     elif bench.args.mode == 'plot':
         bench.load()
         if bench.args.plottype == 'strong':
-            for field in ['velocity', 'stress']:
-                figname = 'SeigenStrong_%s_%s.pdf' % (field, bench.args.solver)
+            for field, solver in product(['velocity', 'stress'], bench.args.solver):
+                figname = 'SeigenStrong_%s_%s.pdf' % (field, solver)
                 time = bench.lookup(event='%s solve:summary' % field, measure='time')
                 events = ['%s:summary' % s for s in petsc_stages['%s solve' % field]]
-                if bench.args.solver != 'implicit':
+                if solver != 'implicit':
                     for ev in events:
                         time += bench.lookup(event=ev, measure='time')
                 bench.plotter.plot_strong_scaling(figname, bench.args.nprocs, time)
-                figname = 'SeigenEfficiency_%s_%s.pdf' % (field, bench.args.solver)
+                figname = 'SeigenEfficiency_%s_%s.pdf' % (field, solver)
                 bench.plotter.plot_efficiency(figname, bench.args.nprocs, time)
 
         elif bench.args.plottype == 'error':
+            bench.plotter.figsize = (8.1, 5.2)
             for field in ['velocity', 'stress']:
                 figname = 'SeigenError_%s.pdf' % field
-                time = {}
-                error = {}
+                time = OrderedDict()
+                error = OrderedDict()
+                styles = OrderedDict()
                 events = ['%s:summary' % s for s in petsc_stages['%s solve' % field]]
-                for deg in bench.args.degree:
-                    label = u'P%d$_{DG}$' % deg
+                for deg, solver in product(bench.args.degree, bench.args.solver):
+                    label = u'P%d$_{DG}$ %s' % (deg, solver)
+                    params = {'degree': deg, 'solver' : solver}
+                    styles[label] = '%s%s%s' % ('-' if solver =='explicit' else ':',
+                                                bench.plotter.marker[deg-1],
+                                                bench.plotter.colour[deg-1])
                     # Annoyingly, nested stage:summary data is not accumulative,
                     # so we need to sum across the relevant forms ourselves
                     time[label] = bench.lookup(event='%s solve:summary' % field,
-                                               measure='time', params={'degree': deg})
-                    if bench.args.solver != 'implicit':
+                                               measure='time', params=params)
+                    if solver != 'implicit':
                         for ev in events:
                             time[label] += bench.lookup(event=ev, measure='time',
-                                                        params={'degree': deg})
+                                                        params=params)
                     error[label] = bench.lookup(event=None, measure='%s_error' % field,
-                                                params={'degree': deg}, category='meta')
-                bench.plotter.plot_error_cost(figname, error, time)
+                                                params=params, category='meta')
+                bench.plotter.plot_error_cost(figname, error, time, styles,
+                                              xlabel='%s error in L2 norm' % field.capitalize())
 
         elif bench.args.plottype == 'roofline':
             for kernel in bench.args.kernel:
