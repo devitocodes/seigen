@@ -97,6 +97,7 @@ class ElasticLF4(object):
             self.tiling_halo = tiling['extra_halo']
             self.tiling_split = tiling['split_mode']
             self.tiling_explicit = tiling['explicit_mode']
+            self.tiling_explicit_id = tiling['explicit_mode_id']
             self.tiling_log = tiling['log']
             self.tiling_sdepth = tiling['s_depth']
             self.tiling_part = tiling['partitioning']
