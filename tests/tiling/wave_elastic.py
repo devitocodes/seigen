@@ -751,6 +751,6 @@ if __name__ == '__main__':
     if profile:
         import cProfile
         cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(**kwargs)',
-                     'log.cprofile')
+                     'log_rank%d.cprofile' % op2.MPI.comm.rank)
     else:
         u1, s1 = ExplosiveSourceLF4().explosive_source_lf4(**kwargs)
