@@ -672,6 +672,7 @@ class ExplosiveSourceLF4():
         # Print runtime summary
         output_time(start, end,
                     tofile=True,
+                    verbose=True,
                     meshid=("h%s" % h).replace('.', ''),
                     nloops=ElasticLF4.loop_chain_length * num_unroll,
                     partitioning=part_mode,
