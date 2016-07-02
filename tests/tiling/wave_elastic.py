@@ -116,6 +116,9 @@ class ElasticLF4(object):
         if self.output:
             with timed_region('i/o'):
                 # File output streams
+                if op2.MPI.comm.size > 20:
+                    # HACK to be sure all ranks write to the same location
+                    platform = "multinode"
                 base = os.path.join('/', 'work', 'fl1612', 'output', platform,
                                     'p%d' % self.degree, 'uf%d' % self.tiling_uf)
                 if op2.MPI.comm.rank == 0:
