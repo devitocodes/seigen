@@ -16,9 +16,6 @@ from time import time
 import sys
 import os
 
-import platform
-platform = platform.node().split('.')[0]
-
 # CX1 hack
 sys.path.insert(0, '')
 
@@ -119,6 +116,9 @@ class ElasticLF4(object):
                 if op2.MPI.comm.size > 20:
                     # HACK to be sure all ranks write to the same location
                     platform = "multinode"
+                else:
+                    import platform
+                    platform = platform.node().split('.')[0]
                 base = os.path.join('/', 'work', 'fl1612', 'output', platform,
                                     'p%d' % self.degree, 'uf%d' % self.tiling_uf)
                 if op2.MPI.comm.rank == 0:
