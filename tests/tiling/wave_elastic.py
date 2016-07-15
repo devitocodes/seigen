@@ -116,6 +116,7 @@ class ElasticLF4(object):
                 if op2.MPI.comm.size > 20:
                     # HACK to be sure all ranks write to the same location
                     platform = "multinode"
+                    platform += "_%s" % os.environ.get('NODETYPE', 'unknown')
                 else:
                     import platform
                     platform = platform.node().split('.')[0]
@@ -674,7 +675,7 @@ class ExplosiveSourceLF4():
 
         # Print runtime summary
         output_time(start, end,
-                    tofile=True,
+                    tofile=tiling['tofile'],
                     verbose=True,
                     meshid=("h%s" % h).replace('.', ''),
                     nloops=ElasticLF4.loop_chain_length * num_unroll,
@@ -702,7 +703,7 @@ if __name__ == '__main__':
 
     # Parse the input
     args = parser(profile=False, check=False, time_max=2.5, h=2.5, cn=0.05,
-                  flatten=False, nocache=False)
+                  flatten=False, nocache=False, tofile=True)
     profile = args.profile
     check = args.check
     mesh_size = args.mesh_size
@@ -723,7 +724,9 @@ if __name__ == '__main__':
         'use_glb_maps': eval(args.glb_maps) if args.glb_maps else False,
         'use_prefetch': eval(args.prefetch) if args.prefetch else False,
         'log': args.log,
-        'nocache': eval(args.nocache) if args.nocache else False
+        'nocache': eval(args.nocache) if args.nocache else False,
+        'tofile': eval(str(args.tofile))
+
     }
 
     # Is it just a run to check correctness?
