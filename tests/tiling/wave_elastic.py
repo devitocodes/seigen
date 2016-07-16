@@ -55,9 +55,8 @@ class ElasticLF4(object):
             # Assumes that the S and U function spaces are the same.
             self.S_tot_dofs = op2.MPI.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
             self.U_tot_dofs = op2.MPI.comm.allreduce(self.U.dof_count, op=mpi4py.MPI.SUM)
-            if op2.MPI.comm.rank == 0:
-                print "Number of degrees of freedom (Velocity): %d" % self.U_tot_dofs
-                print "Number of degrees of freedom (Stress): %d" % self.S_tot_dofs
+            myprint("Number of degrees of freedom (Velocity): %d" % self.U_tot_dofs)
+            myprint("Number of degrees of freedom (Stress): %d" % self.S_tot_dofs)
 
             self.s = TrialFunction(self.S)
             self.v = TestFunction(self.S)
@@ -196,7 +195,7 @@ class ElasticLF4(object):
         if not self.nocache:
             try:
                 self.velocity_mass_asdat.load(U_filename)
-                print "Loaded velocity mass matrix from", U_filename
+                myprint("Loaded velocity mass matrix from %s" % U_filename)
                 loaded = True
             except:
                 pass
@@ -211,13 +210,13 @@ class ElasticLF4(object):
                self.velocity_mass_asdat.data[i] = m[:, :].flatten()
             # Store...
             if self.nocache:
-                print "Computed velocity mass matrix"
+                myprint("Computed velocity mass matrix")
             else:
                 if op2.MPI.comm.rank == 0 and not os.path.exists(os.path.dirname(U_filename)):
                     os.makedirs(os.path.dirname(U_filename))
                 op2.MPI.comm.barrier()
                 self.velocity_mass_asdat.save(U_filename)
-                print "Stored velocity mass matrix into", U_filename
+                myprint("Stored velocity mass matrix into %s" % U_filename)
 
         # Copy the stress mass matrix into a Dat
         smat = self.imass_stress.handle
@@ -229,7 +228,7 @@ class ElasticLF4(object):
         if not self.nocache:
             try:
                 self.stress_mass_asdat.load(S_filename)
-                print "Loaded stress mass matrix from", S_filename
+                myprint("Loaded stress mass matrix from %s" % S_filename)
                 loaded = True
             except:
                 pass
@@ -244,13 +243,13 @@ class ElasticLF4(object):
                self.stress_mass_asdat.data[i] = m[:, :].flatten()
             # Store...
             if self.nocache:
-                print "Computed stress mass matrix"
+                myprint("Computed stress mass matrix")
             else:
                 if op2.MPI.comm.rank == 0 and not os.path.exists(os.path.dirname(S_filename)):
                     os.makedirs(os.path.dirname(S_filename))
                 op2.MPI.comm.barrier()
                 self.stress_mass_asdat.save(S_filename)
-                print "Stored stress mass matrix into", S_filename
+                myprint("Stored stress mass matrix into %s" % S_filename)
 
     @property
     def form_uh1(self):
@@ -410,7 +409,7 @@ class ElasticLF4(object):
                      arg1)
 
     def footprint(self):
-        """Track memory footprint of all loops in the trace."""
+        """Track memory footprint(of all loops in the trace."""
         from pyop2.base import ParLoop
         if op2.MPI.comm.rank == 0:
             loops = [l for l in _trace._trace if isinstance(l, ParLoop)]
@@ -446,19 +445,19 @@ class ElasticLF4(object):
         # Write out the initial condition.
         self.write(self.u1, self.s1)
 
-        print "Generating inverse mass matrix"
+        myprint("Generating inverse mass matrix")
         # Pre-assemble the inverse mass matrices, which should stay
         # constant throughout the simulation (assuming no mesh adaptivity).
         start = time()
         self.assemble_inverse_mass()
         end = time()
-        print "DONE! (Elapsed: ", round(end - start, 3), "s )"
+        myprint("DONE! (Elapsed: %f s)" % round(end - start, 3))
         op2.MPI.comm.barrier()
-        print "Copying inverse mass matrix into a dat..."
+        myprint("Copying inverse mass matrix into a dat...")
         start = time()
         self.copy_massmatrix_into_dat()
         end = time()
-        print "DONE! (Elapsed: ", round(end - start, 3), "s )"
+        myprint("DONE! (Elapsed: %f s)" % round(end - start, 3))
         op2.MPI.comm.barrier()
 
         start = time()
@@ -556,6 +555,12 @@ def cfl_dt(dx, Vp, courant_number):
    return (courant_number*dx)/Vp
 
 
+def myprint(msg):
+    r"""Only print on rank 0."""
+    if op2.MPI.comm.rank == 0:
+        print msg
+
+
 # Test cases
 
 class FusionModes():
@@ -627,9 +632,8 @@ class ExplosiveSourceLF4():
             # Instantiate the model ...
             self.elastic = ElasticLF4(mesh, "DG", poly_order, dimension=2, output=output, tiling=tiling)
 
-        if op2.MPI.comm.rank == 0:
-            print "S-depth used:", s_depth
-            print "Polynomial order:", poly_order
+        myprint("S-depth used: %d" % s_depth)
+        myprint("Polynomial order: %d" % poly_order)
 
         # Constants
         self.elastic.density = 1.0
@@ -638,15 +642,13 @@ class ExplosiveSourceLF4():
 
         self.Vp = Vp(self.elastic.mu, self.elastic.l, self.elastic.density)
         self.Vs = Vs(self.elastic.mu, self.elastic.density)
-        if op2.MPI.comm.rank == 0:
-            print "P-wave velocity: %f" % self.Vp
-            print "S-wave velocity: %f" % self.Vs
+        myprint("P-wave velocity: %f" % self.Vp)
+        myprint("S-wave velocity: %f" % self.Vs)
 
         self.dx = h
         self.courant_number = cn
         self.elastic.dt = cfl_dt(self.dx, self.Vp, self.courant_number)
-        if op2.MPI.comm.rank == 0:
-            print "Using a timestep of %f" % self.elastic.dt # This was previously hard-coded to be 0.001 s.
+        myprint("Using a timestep of %f" % self.elastic.dt) # This was previously hard-coded to be 0.001 s.
 
         # Source
         exp_area = (44.5, 45.5, Ly - 1.5, Ly - 0.5)
@@ -726,25 +728,24 @@ if __name__ == '__main__':
         'log': args.log,
         'nocache': eval(args.nocache) if args.nocache else False,
         'tofile': eval(str(args.tofile))
-
     }
 
     # Is it just a run to check correctness?
     if check:
         Lx, Ly, h, time_max, tolerance = 20, 20, 2.5, 0.01, 1e-10
-        print "Checking correctness of original and tiled versions, with:"
-        print "    (Lx, Ly, T, tolerance)=%s" % str((Lx, Ly, time_max, tolerance))
-        print "    %s" % tiling
+        myprint("Checking correctness of original and tiled versions, with:")
+        myprint("    (Lx, Ly, T, tolerance)=%s" % str((Lx, Ly, time_max, tolerance)))
+        myprint("    %s" % tiling)
         # Run the tiled variant
         u1, s1 = ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h, sys.maxint, tiling)
         # Run the original code
         original = {'num_unroll': 0, 'tile_size': 0, 'mode': None, 'partitioning': 'chunk', 'extra_halo': 0}
         u1_orig, s1_orig = ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h, sys.maxint, original)
         # Check output
-        print "Checking output..."
+        myprint("Checking output...")
         assert np.allclose(u1.dat.data, u1_orig.dat.data, rtol=1e-10)
         assert np.allclose(s1.dat.data, s1_orig.dat.data, rtol=1e-10)
-        print "Results OK!"
+        myprint("Results OK!")
         sys.exit(0)
 
     # How often should we do I/O?
@@ -758,7 +759,7 @@ if __name__ == '__main__':
     if mesh_file:
         try:
             h, cn = float(args.h), float(args.cn)
-            print "Using the unstructured mesh %s" % mesh_file
+            myprint("Using the unstructured mesh %s" % mesh_file)
         except:
             raise RuntimeError("Provided a mesh file, but missing a valid h")
         kwargs = {'T': time_max, 'mesh_file': mesh_file, 'h': h, 'cn': cn,
@@ -769,7 +770,7 @@ if __name__ == '__main__':
         except:
             # Original mesh size
             Lx, Ly, h = 300.0, 150.0, 2.5
-        print "Using the structured mesh with values (Lx,Ly,h)=%s" % str((Lx, Ly, h))
+        myprint("Using the structured mesh with values (Lx,Ly,h)=%s" % str((Lx, Ly, h)))
         kwargs = {'T': time_max, 'Lx': Lx, 'Ly': Ly, 'h': h, 'output': output,
                   'poly_order': poly_order, 'tiling': tiling}
 
