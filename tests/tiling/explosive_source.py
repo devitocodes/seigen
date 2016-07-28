@@ -1,13 +1,7 @@
-from firedrake import *
-from firedrake.petsc import PETSc
-
-from pyop2.utils import cached_property
-from pyop2.profiling import timed_region, summary
-from pyop2.base import _trace, Dat, DataSet
-from pyop2.configuration import configuration
-from pyop2.fusion import loop_chain, loop_chain_tag
-
-import coffee.base as ast
+"""
+This is an explicit DG method: we invert the mass matrix and perform
+a matrix-vector multiplication to get the solution in a time step
+"""
 
 from math import *
 import mpi4py
@@ -15,21 +9,30 @@ import numpy as np
 from time import time
 import sys
 import os
+import cProfile
 
 import platform
 platform = platform.node().split('.')[0]
 
-from utils.benchmarking import parser, output_time
-from utils.tiling import calculate_sdepth
+from firedrake import *
+from firedrake.petsc import PETSc
 
-# This is an explicit DG method: we invert the mass matrix and perform a matrix-vector multiplication to get the solution
+from pyop2.utils import cached_property
+from pyop2.profiling import timed_region
+from pyop2.base import _trace, Dat, DataSet
+from pyop2.configuration import configuration
+from pyop2.fusion import loop_chain, loop_chain_tag
+from pyop2.logger import info
+
+import coffee.base as ast
+
+from seigen.tests.tiling.utils import parser, output_time, calculate_sdepth, FusionSchemes
 
 
 class ElasticLF4(object):
-    r""" An elastic wave equation solver, using the finite element method for spatial discretisation,
-    and a fourth-order leap-frog time-stepping scheme. """
+    r"""An elastic wave equation solver, using the finite element method
+    for spatial discretisation, and a fourth-order leap-frog time-stepping scheme."""
 
-    # Constants
     loop_chain_length = 28
     num_solves = 8
 
@@ -44,89 +47,83 @@ class ElasticLF4(object):
         :param dict tiling: Parameters driving tiling (tile size, unroll factor, mode, ...)
         :returns: None
         """
-        with timed_region('function setup'):
-            self.degree = degree
-            self.mesh = mesh
-            self.dimension = dimension
-            self.output = output
+        self.degree = degree
+        self.mesh = mesh
+        self.dimension = dimension
+        self.output = output
 
-            self.S = TensorFunctionSpace(mesh, family, degree, name='S')
-            self.U = VectorFunctionSpace(mesh, family, degree, name='U')
-            # Assumes that the S and U function spaces are the same.
-            self.S_tot_dofs = op2.MPI.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
-            self.U_tot_dofs = op2.MPI.comm.allreduce(self.U.dof_count, op=mpi4py.MPI.SUM)
-            if op2.MPI.comm.rank == 0:
-                print "Number of degrees of freedom (Velocity): %d" % self.U_tot_dofs
-                print "Number of degrees of freedom (Stress): %d" % self.S_tot_dofs
+        self.S = TensorFunctionSpace(mesh, family, degree, name='S')
+        self.U = VectorFunctionSpace(mesh, family, degree, name='U')
+        # Assumes that the S and U function spaces are the same.
+        self.S_tot_dofs = op2.MPI.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
+        self.U_tot_dofs = op2.MPI.comm.allreduce(self.U.dof_count, op=mpi4py.MPI.SUM)
+        info("Number of degrees of freedom (Velocity): %d" % self.U_tot_dofs)
+        info("Number of degrees of freedom (Stress): %d" % self.S_tot_dofs)
 
-            self.s = TrialFunction(self.S)
-            self.v = TestFunction(self.S)
-            self.u = TrialFunction(self.U)
-            self.w = TestFunction(self.U)
+        self.s = TrialFunction(self.S)
+        self.v = TestFunction(self.S)
+        self.u = TrialFunction(self.U)
+        self.w = TestFunction(self.U)
 
-            self.s0 = Function(self.S, name="StressOld")
-            self.sh1 = Function(self.S, name="StressHalf1")
-            self.stemp = Function(self.S, name="StressTemp")
-            self.sh2 = Function(self.S, name="StressHalf2")
-            self.s1 = Function(self.S, name="StressNew")
+        self.s0 = Function(self.S, name="StressOld")
+        self.sh1 = Function(self.S, name="StressHalf1")
+        self.stemp = Function(self.S, name="StressTemp")
+        self.sh2 = Function(self.S, name="StressHalf2")
+        self.s1 = Function(self.S, name="StressNew")
 
-            self.u0 = Function(self.U, name="VelocityOld")
-            self.uh1 = Function(self.U, name="VelocityHalf1")
-            self.utemp = Function(self.U, name="VelocityTemp")
-            self.uh2 = Function(self.U, name="VelocityHalf2")
-            self.u1 = Function(self.U, name="VelocityNew")
+        self.u0 = Function(self.U, name="VelocityOld")
+        self.uh1 = Function(self.U, name="VelocityHalf1")
+        self.utemp = Function(self.U, name="VelocityTemp")
+        self.uh2 = Function(self.U, name="VelocityHalf2")
+        self.u1 = Function(self.U, name="VelocityNew")
 
-            self.absorption_function = None
-            self.source_function = None
-            self.source_expression = None
-            self._dt = None
-            self._density = None
-            self._mu = None
-            self._l = None
+        self.absorption_function = None
+        self.source_function = None
+        self.source_expression = None
+        self._dt = None
+        self._density = None
+        self._mu = None
+        self._l = None
 
-            self.n = FacetNormal(self.mesh)
-            self.I = Identity(self.dimension)
+        self.n = FacetNormal(self.mesh)
+        self.I = Identity(self.dimension)
 
-            # Tiling options
-            self.tiling_size = tiling['tile_size']
-            self.tiling_uf = tiling['num_unroll']
-            self.tiling_mode = tiling['mode']
-            self.tiling_halo = tiling['extra_halo']
-            self.tiling_split = tiling['split_mode']
-            self.tiling_explicit = tiling['explicit_mode']
-            self.tiling_explicit_id = tiling['explicit_mode_id']
-            self.tiling_log = tiling['log']
-            self.tiling_sdepth = tiling['s_depth']
-            self.tiling_part = tiling['partitioning']
-            self.tiling_coloring = tiling['coloring']
-            self.tiling_glb_maps = tiling['use_glb_maps']
-            self.tiling_prefetch = tiling['use_prefetch']
+        # Tiling options
+        self.tiling_size = tiling['tile_size']
+        self.tiling_uf = tiling['num_unroll']
+        self.tiling_mode = tiling['mode']
+        self.tiling_halo = tiling['extra_halo']
+        self.tiling_explicit = tiling['explicit_mode']
+        self.tiling_explicit_id = tiling['explicit_mode_id']
+        self.tiling_log = tiling['log']
+        self.tiling_sdepth = tiling['s_depth']
+        self.tiling_part = tiling['partitioning']
+        self.tiling_coloring = tiling['coloring']
+        self.tiling_glb_maps = tiling['use_glb_maps']
+        self.tiling_prefetch = tiling['use_prefetch']
 
-            # Caches
-            self.asts = {}
-            self.mass_cache = os.path.join("/", "data", "cache")
-            self.nocache = tiling['nocache']
+        # Mat-vec AST cache
+        self.asts = {}
 
         if self.output:
-            with timed_region('i/o'):
-                # File output streams
-                base = os.path.join('/', 'data', 'output', platform,
-                                    'p%d' % self.degree, 'uf%d' % self.tiling_uf)
-                if op2.MPI.comm.rank == 0:
-                    if not os.path.exists(base):
-                        os.makedirs(base)
-                    sub_dirs = [d for d in os.listdir(base)
-                                if os.path.isdir(os.path.join(base, d))]
-                    sub_dir = "%d_em%d_part%s_tile%s" % (len(sub_dirs),
-                                                         self.tiling_explicit_id if self.tiling_explicit_id else 0,
-                                                         self.tiling_size if self.tiling_uf else 0,
-                                                         self.tiling_part if self.tiling_uf else 'None')
-                    base = os.path.join(base, sub_dir)
+            # File output streams
+            base = os.path.join('/', 'data', 'output', platform,
+                                'p%d' % self.degree, 'uf%d' % self.tiling_uf)
+            if op2.MPI.comm.rank == 0:
+                if not os.path.exists(base):
                     os.makedirs(base)
-                op2.MPI.comm.barrier()
-                base = op2.MPI.comm.bcast(base, root=0)
-                self.u_stream = File(os.path.join(base, 'velocity.pvd'))
-                self.s_stream = File(os.path.join(base, 'stress.pvd'))
+                sub_dirs = [d for d in os.listdir(base)
+                            if os.path.isdir(os.path.join(base, d))]
+                sub_dir = "%d_em%d_part%s_tile%s" % (len(sub_dirs),
+                                                     self.tiling_explicit_id,
+                                                     self.tiling_size if self.tiling_uf else 0,
+                                                     self.tiling_part if self.tiling_uf else 'None')
+                base = os.path.join(base, sub_dir)
+                os.makedirs(base)
+            op2.MPI.comm.barrier()
+            base = op2.MPI.comm.bcast(base, root=0)
+            self.u_stream = File(os.path.join(base, 'velocity.pvd'))
+            self.s_stream = File(os.path.join(base, 'stress.pvd'))
 
     @property
     def absorption(self):
@@ -172,75 +169,32 @@ class ElasticLF4(object):
         self.imass_stress = self.inverse_mass_stress.M
 
     def copy_massmatrix_into_dat(self):
-        mesh_name = os.path.splitext(os.path.basename(self.mesh.name))[0]
-        filename = os.path.join(self.mass_cache, "np%d" % op2.MPI.comm.size,
-                                "sdepth%d" % self.tiling_sdepth, mesh_name)
 
         # Copy the velocity mass matrix into a Dat
         vmat = self.imass_velocity.handle
         arity = sum(self.U.topological.dofs_per_entity)*self.U.topological.dim
         self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
-        U_filename = os.path.join(filename, 'U', 'p%d' % self.degree, 'totdofs%d' % self.U_tot_dofs,
-                                  "ndofs%d_rank%d" % (self.U.dof_count, op2.MPI.comm.rank))
-        loaded = False
-        if not self.nocache:
-            try:
-                self.velocity_mass_asdat.load(U_filename)
-                print "Loaded velocity mass matrix from", U_filename
-                loaded = True
-            except:
-                pass
-        op2.MPI.comm.barrier()
-        if not loaded:
-            istart, iend = vmat.getOwnershipRange()
-            idxs = [ PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
-                                              comm=PETSc.COMM_SELF)
-                     for i in range(istart, iend, arity)]
-            submats = vmat.getSubMatrices(idxs, idxs)
-            for i, m in enumerate(submats):
-               self.velocity_mass_asdat.data[i] = m[:, :].flatten()
-            # Store...
-            if self.nocache:
-                print "Computed velocity mass matrix"
-            else:
-                if op2.MPI.comm.rank == 0 and not os.path.exists(os.path.dirname(U_filename)):
-                    os.makedirs(os.path.dirname(U_filename))
-                op2.MPI.comm.barrier()
-                self.velocity_mass_asdat.save(U_filename)
-                print "Stored velocity mass matrix into", U_filename
+        istart, iend = vmat.getOwnershipRange()
+        idxs = [PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
+                                         comm=PETSc.COMM_SELF)
+                for i in range(istart, iend, arity)]
+        submats = vmat.getSubMatrices(idxs, idxs)
+        for i, m in enumerate(submats):
+            self.velocity_mass_asdat.data[i] = m[:, :].flatten()
+        info("Computed velocity mass matrix")
 
         # Copy the stress mass matrix into a Dat
         smat = self.imass_stress.handle
         arity = sum(self.S.topological.dofs_per_entity)*self.S.topological.dim
         self.stress_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
-        S_filename = os.path.join(filename, 'S', 'p%d' % self.degree, 'totdofs%d' % self.S_tot_dofs,
-                                  "ndofs%d_rank%d" % (self.S.dof_count, op2.MPI.comm.rank))
-        loaded = False
-        if not self.nocache:
-            try:
-                self.stress_mass_asdat.load(S_filename)
-                print "Loaded stress mass matrix from", S_filename
-                loaded = True
-            except:
-                pass
-        op2.MPI.comm.barrier()
-        if not loaded:
-            istart, iend = smat.getOwnershipRange()
-            idxs = [ PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
-                                              comm=PETSc.COMM_SELF)
-                     for i in range(istart, iend, arity)]
-            submats = smat.getSubMatrices(idxs, idxs)
-            for i, m in enumerate(submats):
-               self.stress_mass_asdat.data[i] = m[:, :].flatten()
-            # Store...
-            if self.nocache:
-                print "Computed stress mass matrix"
-            else:
-                if op2.MPI.comm.rank == 0 and not os.path.exists(os.path.dirname(S_filename)):
-                    os.makedirs(os.path.dirname(S_filename))
-                op2.MPI.comm.barrier()
-                self.stress_mass_asdat.save(S_filename)
-                print "Stored stress mass matrix into", S_filename
+        istart, iend = smat.getOwnershipRange()
+        idxs = [PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
+                                         comm=PETSc.COMM_SELF)
+                for i in range(istart, iend, arity)]
+        submats = smat.getSubMatrices(idxs, idxs)
+        for i, m in enumerate(submats):
+            self.stress_mass_asdat.data[i] = m[:, :].flatten()
+        info("Computed stress mass matrix")
 
     @property
     def form_uh1(self):
@@ -359,9 +313,6 @@ class ElasticLF4(object):
         if identifier in self.asts:
             return self.asts[identifier]
 
-        from coffee.plan import isa
-        doubles_per_register = isa['dp_reg']
-
         # Craft the AST
         body = ast.Incr(ast.Symbol('C', ('i/%d' % cdim, 'index')),
                         ast.Prod(ast.Symbol('A', ('i',), ((ndofs*cdim, 'j*%d + k' % cdim),)),
@@ -386,18 +337,12 @@ class ElasticLF4(object):
         F_a = assemble(rhs)
         ast_matmul = self.ast_matmul(F_a)
 
-        # HACK: preven mat-vec args from flattening
-        arg0 = F_a.dat(op2.READ, F_a.cell_node_map())
-        arg1 = result.dat(op2.WRITE, result.cell_node_map())
-        arg0.hackflatten = True
-        arg1.hackflatten = True
-
         # Create the par loop (automatically added to the trace of loops to be executed)
         kernel = op2.Kernel(ast_matmul, ast_matmul.name)
         op2.par_loop(kernel, self.mesh.cell_set,
                      matrix_asdat(op2.READ),
-                     arg0,
-                     arg1)
+                     F_a.dat(op2.READ, F_a.cell_node_map()),
+                     result.dat(op2.WRITE, result.cell_node_map()))
 
     def write(self, u=None, s=None, output=True):
         r""" Write the velocity and/or stress fields to file.
@@ -411,8 +356,10 @@ class ElasticLF4(object):
                 if(u):
                     self.u_stream << u
                 if(s):
-                    pass  # FIXME: Cannot currently write tensor valued fields to a VTU file. See https://github.com/firedrakeproject/firedrake/issues/538
+                    # FIXME: Cannot currently write tensor valued fields to a VTU file.
+                    # See https://github.com/firedrakeproject/firedrake/issues/538
                     #self.s_stream << s
+                    pass
 
     def run(self, T):
         """ Run the elastic wave simulation until t = T.
@@ -423,19 +370,19 @@ class ElasticLF4(object):
         # Write out the initial condition.
         self.write(self.u1, self.s1)
 
-        print "Generating inverse mass matrix"
+        info("Generating inverse mass matrix")
         # Pre-assemble the inverse mass matrices, which should stay
         # constant throughout the simulation (assuming no mesh adaptivity).
         start = time()
         self.assemble_inverse_mass()
         end = time()
-        print "DONE! (Elapsed: ", round(end - start, 3), "s )"
+        info("DONE! (Elapsed: ", round(end - start, 3), "s )")
         op2.MPI.comm.barrier()
-        print "Copying inverse mass matrix into a dat..."
+        info("Copying inverse mass matrix into a dat...")
         start = time()
         self.copy_massmatrix_into_dat()
         end = time()
-        print "DONE! (Elapsed: ", round(end - start, 3), "s )"
+        info("DONE! (Elapsed: ", round(end - start, 3), "s )")
         op2.MPI.comm.barrier()
 
         start = time()
@@ -443,12 +390,17 @@ class ElasticLF4(object):
         timestep = 0
         while t <= T + 1e-12:
             if op2.MPI.comm.rank == 0 and timestep % self.output == 0:
-                print "t = %f, (timestep = %d)" % (t, timestep)
-            with loop_chain("main1", tile_size=self.tiling_size, num_unroll=self.tiling_uf,
-                            mode=self.tiling_mode, extra_halo=self.tiling_halo,
-                            split_mode=self.tiling_split, explicit=self.tiling_explicit,
-                            log=self.tiling_log, use_glb_maps=self.tiling_glb_maps,
-                            use_prefetch=self.tiling_prefetch, coloring=self.tiling_coloring):
+                info("t = %f, (timestep = %d)" % (t, timestep))
+            with loop_chain("main1",
+                            tile_size=self.tiling_size,
+                            num_unroll=self.tiling_uf,
+                            mode=self.tiling_mode,
+                            extra_halo=self.tiling_halo,
+                            explicit=self.tiling_explicit,
+                            use_glb_maps=self.tiling_glb_maps,
+                            use_prefetch=self.tiling_prefetch,
+                            coloring=self.tiling_coloring,
+                            log=self.tiling_log):
                 # In case the source is time-dependent, update the time 't' here.
                 if(self.source):
                     with timed_region('source term update'):
@@ -492,7 +444,8 @@ def Vp(mu, l, density):
 
      .. math:: \sqrt{\frac{(\lambda + 2\mu)}{\rho}}
 
-    where :math:`\rho` is the density, and :math:`\lambda` and :math:`\mu` are the first and second Lame parameters, respectively.
+    where :math:`\rho` is the density, and :math:`\lambda` and :math:`\mu` are
+    the first and second Lame parameters, respectively.
 
     :param mu: The second Lame parameter.
     :param l: The first Lame parameter.
@@ -508,7 +461,7 @@ def Vs(mu, density):
 
      .. math:: \sqrt{\frac{\mu}{\rho}}
 
-    where :math:`\rho` is the density, and :math:`\lambda` and :math:`\mu` is the second Lame parameter.
+    where :math:`\rho` is the density, and :math:`\mu` is the second Lame parameter.
 
     :param mu: The second Lame parameter.
     :param density: The density.
@@ -519,36 +472,14 @@ def Vs(mu, density):
 
 
 def cfl_dt(dx, Vp, courant_number):
-   r""" Computes the maximum permitted value for the timestep math:`\delta t`.
-   :param float dx: The characteristic element length.
-   :param float Vp: The P-wave velocity.
-   :param float courant_number: The desired Courant number
-   :returns: The maximum permitted timestep, math:`\delta t`.
-   :rtype: float
-   """
-   return (courant_number*dx)/Vp
-
-
-# Test cases
-
-class FusionModes():
-
-    # (num_solves, [(first_loop_index, last_loop_index, tile_size_multiplier)])
-    modes = {
-        1: (1, [(1, 3, 4), (8, 10, 4), (17, 19, 4)]),
-        2: (1, [(1, 2, 4), (4, 6, 4), (8, 9, 4), (10, 12, 2),
-                (13, 15, 4), (17, 18, 4), (20, 22, 4), (23, 25, 1)]),
-        3: (1, [(1, 3, 4), (4, 7, 4), (8, 12, 2), (13, 16, 4), (17, 19, 4), (20, 25, 1)]),
-        4: (2, [(1, 7, 1), (8, 16, 1),  (17, 25, 1)]),
-        5: (4, [(0, 12, 1), (13, 25, 1)]),
-        6: (8, [(0, 25, 1)])
-    }
-
-    @staticmethod
-    def get(mode, part_mode, tile_size):
-        num_solves, mode = FusionModes.modes[mode]
-        mode = [(i, j, tile_size*(k if part_mode == 'chunk' else 1)) for i, j, k in mode]
-        return num_solves, mode
+    r""" Computes the maximum permitted value for the timestep math:`\delta t`.
+    :param float dx: The characteristic element length.
+    :param float Vp: The P-wave velocity.
+    :param float courant_number: The desired Courant number
+    :returns: The maximum permitted timestep, math:`\delta t`.
+    :rtype: float
+    """
+    return (courant_number*dx)/Vp
 
 
 class ExplosiveSourceLF4():
@@ -556,52 +487,42 @@ class ExplosiveSourceLF4():
     def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, cn=0.05,
                              mesh_file=None, output=1, poly_order=2, tiling=None):
 
-        # Tiling info
         tile_size = tiling['tile_size']
         num_unroll = tiling['num_unroll']
         extra_halo = tiling['extra_halo']
         part_mode = tiling['partitioning']
-        glb_maps = tiling['use_glb_maps']
-        prefetch = tiling['use_prefetch']
-        coloring = tiling['coloring']
-        fusion_mode = tiling['mode']
-
-        # Set a suitable tiling mode
-        split_mode = tiling['split_mode']
         explicit_mode = tiling['explicit_mode']
+
         if explicit_mode:
-            tiling['explicit_mode'] = FusionModes.get(explicit_mode, part_mode, tile_size)[1]
+            fusion_scheme = FusionSchemes.get(explicit_mode, part_mode, tile_size)
+            num_solves, tiling['explicit_mode'] = fusion_scheme
+        else:
+            num_solves = ElasticLF4.num_solves
 
         with timed_region('mesh generation'):
-            # Get a mesh ...
-            mesh = Mesh(mesh_file) if mesh_file else RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
-
-            # Set proper options ...
-            kwargs = {}
-            if fusion_mode in ['soft', 'hard']:
-                s_depth = 1
+            if mesh_file:
+                mesh = Mesh(mesh_file)
             else:
-                num_solves = ElasticLF4.num_solves
-                if explicit_mode:
-                    num_solves = FusionModes.get(explicit_mode, part_mode, tile_size)[0]
-                elif split_mode > 0 and split_mode < num_solves:
-                    num_solves = split_mode
+                RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
+
+            kwargs = {}
+            if tiling['mode'] in ['tile', 'only_tile']:
                 s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
                 if part_mode == 'metis':
-                    n_parts = mesh.num_cells() / tile_size
-                    kwargs['reorder'] = ('metis-rcm', n_parts)
+                    kwargs['reorder'] = ('metis-rcm', mesh.num_cells() / tile_size)
+            else:
+                s_depth = 1
             kwargs['s_depth'] = s_depth
             tiling['s_depth'] = s_depth
 
             mesh.topology.init(**kwargs)
             slope(mesh, debug=False)
 
-            # Instantiate the model ...
-            self.elastic = ElasticLF4(mesh, "DG", poly_order, dimension=2, output=output, tiling=tiling)
+            self.elastic = ElasticLF4(mesh, "DG", poly_order, dimension=2,
+                                      output=output, tiling=tiling)
 
-        if op2.MPI.comm.rank == 0:
-            print "S-depth used:", s_depth
-            print "Polynomial order:", poly_order
+        info("S-depth used:", s_depth)
+        info("Polynomial order:", poly_order)
 
         # Constants
         self.elastic.density = 1.0
@@ -610,15 +531,13 @@ class ExplosiveSourceLF4():
 
         self.Vp = Vp(self.elastic.mu, self.elastic.l, self.elastic.density)
         self.Vs = Vs(self.elastic.mu, self.elastic.density)
-        if op2.MPI.comm.rank == 0:
-            print "P-wave velocity: %f" % self.Vp
-            print "S-wave velocity: %f" % self.Vs
+        info("P-wave velocity: %f" % self.Vp)
+        info("S-wave velocity: %f" % self.Vs)
 
         self.dx = h
         self.courant_number = cn
         self.elastic.dt = cfl_dt(self.dx, self.Vp, self.courant_number)
-        if op2.MPI.comm.rank == 0:
-            print "Using a timestep of %f" % self.elastic.dt # This was previously hard-coded to be 0.001 s.
+        info("Using a timestep of %f" % self.elastic.dt)
 
         # Source
         exp_area = (44.5, 45.5, Ly - 1.5, Ly - 0.5)
@@ -650,15 +569,14 @@ class ExplosiveSourceLF4():
                     tofile=True,
                     verbose=True,
                     meshid=("h%s" % h).replace('.', ''),
-                    nloops=ElasticLF4.loop_chain_length * num_unroll,
+                    nloops=ElasticLF4.loop_chain_length*num_unroll,
                     partitioning=part_mode,
                     tile_size=tile_size,
                     extra_halo=extra_halo,
-                    split_mode=split_mode,
                     explicit_mode=explicit_mode,
-                    glb_maps=glb_maps,
-                    prefetch=prefetch,
-                    coloring=coloring,
+                    glb_maps=tiling['glb_maps'],
+                    prefetch=tiling['prefetch'],
+                    coloring=tiling['coloring'],
                     poly_order=poly_order,
                     domain=os.path.splitext(os.path.basename(mesh.name))[0])
 
@@ -667,22 +585,12 @@ class ExplosiveSourceLF4():
 
 if __name__ == '__main__':
     op2.init(log_level='WARNING')
-    from ffc.log import set_level
-    set_level('ERROR')
 
     # Switch on PyOP2 profiling
     configuration['profiling'] = True
 
     # Parse the input
-    args = parser(profile=False, check=False, time_max=2.5, h=2.5, cn=0.05,
-                  flatten=False, nocache=False)
-    profile = args.profile
-    check = args.check
-    mesh_size = args.mesh_size
-    mesh_file = args.mesh_file
-    time_max = float(args.time_max)
-    flatten = True if args.flatten == 'True' else False
-    poly_order = args.poly_order
+    args = parser()
     tiling = {
         'num_unroll': args.num_unroll,
         'tile_size': args.tile_size,
@@ -690,67 +598,48 @@ if __name__ == '__main__':
         'partitioning': args.part_mode,
         'coloring': args.coloring,
         'extra_halo': args.extra_halo,
-        'split_mode': args.split_mode,
         'explicit_mode': args.explicit_mode,
         'explicit_mode_id': args.explicit_mode,
-        'use_glb_maps': eval(args.glb_maps) if args.glb_maps else False,
-        'use_prefetch': eval(args.prefetch) if args.prefetch else False,
+        'use_glb_maps': args.glb_maps,
+        'use_prefetch': args.prefetch,
         'log': args.log,
-        'nocache': eval(args.nocache) if args.nocache else False
     }
 
     # Is it just a run to check correctness?
-    if check:
+    if args.check:
         Lx, Ly, h, time_max, tolerance = 20, 20, 2.5, 0.01, 1e-10
-        print "Checking correctness of original and tiled versions, with:"
-        print "    (Lx, Ly, T, tolerance)=%s" % str((Lx, Ly, time_max, tolerance))
-        print "    %s" % tiling
+        info("Checking correctness of original and tiled versions, with:")
+        info("    (Lx, Ly, T, tolerance)=%s" % str((Lx, Ly, time_max, tolerance)))
+        info("    %s" % tiling)
         # Run the tiled variant
-        u1, s1 = ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h, sys.maxint, tiling)
+        u1, s1 = ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h,
+                                                           sys.maxint, tiling)
         # Run the original code
-        original = {'num_unroll': 0, 'tile_size': 0, 'mode': None, 'partitioning': 'chunk', 'extra_halo': 0}
-        u1_orig, s1_orig = ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h, sys.maxint, original)
+        original = {'num_unroll': 0, 'tile_size': 0, 'mode': None,
+                    'partitioning': 'chunk', 'extra_halo': 0}
+        u1_orig, s1_orig = ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h,
+                                                                     sys.maxint, original)
         # Check output
-        print "Checking output..."
+        info("Checking output...")
         assert np.allclose(u1.dat.data, u1_orig.dat.data, rtol=1e-10)
         assert np.allclose(s1.dat.data, s1_orig.dat.data, rtol=1e-10)
-        print "Results OK!"
+        info("Results OK!")
         sys.exit(0)
 
-    # How often should we do I/O?
-    try:
-        output = int(args.output) or 1
-    except:
-        # Every timestep
-        output = 1
-
     # Set the input mesh
-    if mesh_file:
-        try:
-            h, cn = float(args.h), float(args.cn)
-            print "Using the unstructured mesh %s" % mesh_file
-        except:
-            raise RuntimeError("Provided a mesh file, but missing a valid h")
-        kwargs = {'T': time_max, 'mesh_file': mesh_file, 'h': h, 'cn': cn,
-                  'output': output, 'poly_order': poly_order, 'tiling': tiling}
+    if args.mesh_file:
+        info("Using the unstructured mesh %s" % args.mesh_file)
+        kwargs = {'T': args.time_max, 'mesh_file': args.mesh_file, 'h': args.h, 'cn': args.cn,
+                  'output': args.output, 'poly_order': args.poly_order, 'tiling': tiling}
     else:
-        try:
-            Lx, Ly, h = eval(mesh_size)
-        except:
-            # Original mesh size
-            Lx, Ly, h = 300.0, 150.0, 2.5
-        print "Using the structured mesh with values (Lx,Ly,h)=%s" % str((Lx, Ly, h))
-        kwargs = {'T': time_max, 'Lx': Lx, 'Ly': Ly, 'h': h, 'output': output,
-                  'poly_order': poly_order, 'tiling': tiling}
+        Lx, Ly = eval(args.mesh_size)
+        info("Using the structured mesh with values (Lx,Ly,h)=%s" % str((Lx, Ly, args.h)))
+        kwargs = {'T': args.time_max, 'Lx': Lx, 'Ly': Ly, 'h': args.h, 'output': args.output,
+                  'poly_order': args.poly_order, 'tiling': tiling}
 
-    # HACK: should fields be flattened in the generated code ?
-    if flatten:
-        from pyop2.configuration import configuration
-        configuration['flatten'] = True
-        parameters['coffee']['flatten'] = True
+    info("h=%f, courant number=%f" % (args.h, args.cn))
 
-    if profile:
-        import cProfile
+    if args.profile:
         cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(**kwargs)',
                      'log_rank%d.cprofile' % op2.MPI.comm.rank)
     else:
