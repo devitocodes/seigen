@@ -5,35 +5,56 @@ import platform
 import math
 
 from pyop2.mpi import MPI
-from pyop2.profiling import Timer
+# from pyop2.profiling import Timer
 
 
 def parser():
     p = argparse.ArgumentParser(description='Run Seigen with loop tiling')
     # Tiling
-    p.add_argument('-n', '--num-unroll', type=int, help='time loop unroll factor', default=1)
-    p.add_argument('-z', '--explicit-mode', type=int, help='split chain as [(f, l, ts), ...]', default=0)
-    p.add_argument('-t', '--tile-size', type=int, help='initial average tile size', default=5)
-    p.add_argument('-e', '--fusion-mode', help='(soft, hard, tile, only_tile)', default='tile')
-    p.add_argument('-p', '--part-mode', help='(chunk, metis)', default='chunk')
-    p.add_argument('-x', '--extra-halo', type=int, help='add extra halo layer', default=0)
-    p.add_argument('-v', '--verbose', help='print additional information', default=False)
-    p.add_argument('-l', '--log', help='output inspector to a file', default=False)
-    p.add_argument('-g', '--glb-maps', type=bool, help='use global maps (defaults to False)', default=False)
-    p.add_argument('-r', '--prefetch', type=bool, help='use software prefetching', default=False)
-    p.add_argument('-c', '--coloring', type=bool, help='(default, rand, omp)', default='default')
+    p.add_argument('-n', '--num-unroll', type=int, help='time loop unroll factor',
+                   default=1, dest='num_unroll')
+    p.add_argument('-z', '--explicit-mode', type=int, help='split chain as [(f, l, ts), ...]',
+                   default=0, dest='explicit_mode')
+    p.add_argument('-t', '--tile-size', type=int, help='initial average tile size',
+                   default=5, dest='tile_size')
+    p.add_argument('-e', '--fusion-mode', help='(soft, hard, tile, only_tile)',
+                   default='tile', dest='fusion_mode')
+    p.add_argument('-p', '--part-mode', help='partition modes (chunk, metis)',
+                   default='chunk', dest='part_mode')
+    p.add_argument('-x', '--extra-halo', type=int, help='add extra halo layer',
+                   default=0, dest='extra_halo')
+    p.add_argument('-v', '--verbose', help='print additional information',
+                   default=False, dest='verbose')
+    p.add_argument('-l', '--log', help='output inspector to a file',
+                   default=False, dest='log')
+    p.add_argument('-g', '--glb-maps', type=bool, help='use global maps (defaults to False)',
+                   default=False, dest='glb_maps')
+    p.add_argument('-r', '--prefetch', type=bool, help='use software prefetching',
+                   default=False, dest='prefetch')
+    p.add_argument('-c', '--coloring', type=bool, help='(default, rand, omp)',
+                   default='default', dest='coloring')
     # Correctness
-    p.add_argument('-d', '--debug', help='debug mode (defaults to False)', default=False)
-    p.add_argument('--profile', type=bool, help='enable Python-level profiling', default=False)
-    p.add_argument('--check', type=bool, help='check the numerical results', default=False)
+    p.add_argument('-d', '--debug', help='debug mode (defaults to False)',
+                   default=False, dest='debug')
+    p.add_argument('--profile', type=bool, help='enable Python-level profiling',
+                   default=False, dest='profile')
+    p.add_argument('--check', type=bool, help='check the numerical results',
+                   default=False, dest='check')
     # Simulation
-    p.add_argument('-y', '--poly-order', type=int, help='the method\'s order in space', default=2)
-    p.add_argument('-f', '--mesh-file', help='use a specific mesh file')
-    p.add_argument('-h', '--mesh-spacing', type=float, help='set the mesh spacing', default=2.5)
-    p.add_argument('-m', '--mesh-size', help='format: (Lx, Ly)', default=1)
-    p.add_argument('-o', '--output', type=int, help='timesteps between two solution field writes', default=False)
-    p.add_argument('-cn', '--courant-number', type=float, help='set the courant number', default=0.05)
+    p.add_argument('-y', '--poly-order', type=int, help='the method\'s order in space',
+                   default=1, dest='poly_order')
+    p.add_argument('-f', '--mesh-file', help='use a specific mesh file', dest='mesh_file')
+    p.add_argument('-m', '--mesh-size', help='rectangular mesh, format: (Lx, Ly)',
+                   default=(None, None), dest='mesh_size')
+    p.add_argument('-ms', '--mesh-spacing', type=float, help='set the mesh spacing',
+                   default=2.5, dest='ms')
+    p.add_argument('-o', '--output', type=int, dest='output',
+                   help='timesteps between two solution field writes', default=1)
+    p.add_argument('-cn', '--courant-number', type=float,
+                   help='set the courant number', default=0.05, dest='cn')
     p.add_argument('--time-max', type=float, help='set the simulation duration', default=2.5)
+    p.add_argument('-tf', '--to-file', type=bool, help='store timings to file',
+                   default=True, dest='tofile')
     return p.parse_args()
 
 
@@ -60,7 +81,7 @@ def output_time(start, end, **kwargs):
         output_dir = os.path.join(os.environ["FIREDRAKE_DIR"], "demos", "tiling")
 
     # Find number of processes, and number of threads per process
-    num_procs = MPI.comm.size
+    num_procs = MPI.COMM_WORLD.size
     num_threads = int(os.environ.get("OMP_NUM_THREADS", 1)) if backend == 'OMP' else 1
 
     # What execution mode is this?
@@ -74,13 +95,13 @@ def output_time(start, end, **kwargs):
         versions = ['mpi_openmp']
 
     # Determine the total execution time (Python + kernel execution + MPI cost
-    if MPI.comm.rank in range(1, num_procs):
-        MPI.comm.isend([start, end], dest=0)
-    elif MPI.comm.rank == 0:
+    if MPI.COMM_WORLD.rank in range(1, num_procs):
+        MPI.COMM_WORLD.isend([start, end], dest=0)
+    elif MPI.COMM_WORLD.rank == 0:
         starts, ends = [0]*num_procs, [0]*num_procs
         starts[0], ends[0] = start, end
         for i in range(1, num_procs):
-            starts[i], ends[i] = MPI.comm.recv(source=i)
+            starts[i], ends[i] = MPI.COMM_WORLD.recv(source=i)
         min_start, max_end = min(starts), max(ends)
         tot = round(max_end - min_start, 3)
         print "Time stepping: ", tot, "s"
@@ -91,13 +112,13 @@ def output_time(start, end, **kwargs):
     compute_time = Timer.get_timers().get('ParLoop kernel', 'VOID').total
     mpi_time = Timer.get_timers().get('ParLoop halo exchange end', 'VOID').total
 
-    if MPI.comm.rank in range(1, num_procs):
-        MPI.comm.isend([compute_time, mpi_time], dest=0)
-    elif MPI.comm.rank == 0:
+    if MPI.COMM_WORLD.rank in range(1, num_procs):
+        MPI.COMM_WORLD.isend([compute_time, mpi_time], dest=0)
+    elif MPI.COMM_WORLD.rank == 0:
         compute_times, mpi_times = [0]*num_procs, [0]*num_procs
         compute_times[0], mpi_times[0] = compute_time, mpi_time
         for i in range(1, num_procs):
-            compute_times[i], mpi_times[i] = MPI.comm.recv(source=i)
+            compute_times[i], mpi_times[i] = MPI.COMM_WORLD.recv(source=i)
         ACT = round(avg(compute_times), 3)
         AMT = round(avg(mpi_times), 3)
         ACCT = ACT + AMT
@@ -107,13 +128,13 @@ def output_time(start, end, **kwargs):
     # Determine if a multi-node execution
     is_multinode = False
     platformname = platform.node().split('.')[0]
-    if MPI.comm.rank in range(1, num_procs):
-        MPI.comm.isend(platformname, dest=0)
-    elif MPI.comm.rank == 0:
+    if MPI.COMM_WORLD.rank in range(1, num_procs):
+        MPI.COMM_WORLD.isend(platformname, dest=0)
+    elif MPI.COMM_WORLD.rank == 0:
         all_platform_names = [None]*num_procs
         all_platform_names[0] = platformname
         for i in range(1, num_procs):
-            all_platform_names[i] = MPI.comm.recv(source=i)
+            all_platform_names[i] = MPI.COMM_WORLD.recv(source=i)
         if any(i != platformname for i in all_platform_names):
             is_multinode = True
         if is_multinode:
@@ -146,7 +167,7 @@ def output_time(start, end, **kwargs):
                 new_values.append(new_v)
         return tuple(new_values)
 
-    if MPI.comm.rank == 0 and tofile:
+    if MPI.COMM_WORLD.rank == 0 and tofile:
         name = os.path.splitext(os.path.basename(sys.argv[0]))[0]  # Cut away the extension
         for version in versions:
             filename = os.path.join(output_dir, "times", name, "poly_%d" % poly_order, domain,
@@ -174,13 +195,13 @@ def output_time(start, end, **kwargs):
 
     if verbose:
         for i in range(num_procs):
-            if MPI.comm.rank == i:
+            if MPI.COMM_WORLD.rank == i:
                 tot_time = compute_time + mpi_time
                 offC = (end - start) - tot_time
                 print "Rank %d: compute=%.2fs, mpi=%.2fs -- tot=%.2fs (py=%.2fs, %.2f%%; mpi_oh=%.2f%%)" % \
                     (i, compute_time, mpi_time, tot_time, offC, (offC / (end - start))*100, (mpi_time / (end - start))*100)
                 sys.stdout.flush()
-            MPI.comm.barrier()
+            MPI.COMM_WORLD.barrier()
 
 
 def calculate_sdepth(num_solves, num_unroll, extra_halo):
@@ -194,7 +215,7 @@ def calculate_sdepth(num_solves, num_unroll, extra_halo):
     :arg num_unroll: unroll factor for the loop chain
     :arg extra_halo: to expose the nonexec region to the tiling engine
     """
-    if MPI.parallel and num_unroll > 0:
+    if MPI.COMM_WORLD.size > 1 and num_unroll > 0:
         return (int(math.ceil(num_solves/2.0)) or 1) + extra_halo
     else:
         return 1

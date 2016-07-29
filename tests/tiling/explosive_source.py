@@ -21,12 +21,12 @@ from pyop2.utils import cached_property
 from pyop2.profiling import timed_region
 from pyop2.base import _trace, Dat, DataSet
 from pyop2.configuration import configuration
-from pyop2.fusion import loop_chain, loop_chain_tag
-from pyop2.logger import info
+from pyop2.fusion.interface import loop_chain, loop_chain_tag
+from pyop2.logger import info, set_log_level, INFO
 
 import coffee.base as ast
 
-from seigen.tests.tiling.utils import parser, output_time, calculate_sdepth, FusionSchemes
+from utils import parser, output_time, calculate_sdepth, FusionSchemes
 
 
 class ElasticLF4(object):
@@ -55,8 +55,8 @@ class ElasticLF4(object):
         self.S = TensorFunctionSpace(mesh, family, degree, name='S')
         self.U = VectorFunctionSpace(mesh, family, degree, name='U')
         # Assumes that the S and U function spaces are the same.
-        self.S_tot_dofs = op2.MPI.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
-        self.U_tot_dofs = op2.MPI.comm.allreduce(self.U.dof_count, op=mpi4py.MPI.SUM)
+        self.S_tot_dofs = op2.MPI.COMM_WORLD.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
+        self.U_tot_dofs = op2.MPI.COMM_WORLD.allreduce(self.U.dof_count, op=mpi4py.MPI.SUM)
         info("Number of degrees of freedom (Velocity): %d" % self.U_tot_dofs)
         info("Number of degrees of freedom (Stress): %d" % self.S_tot_dofs)
 
@@ -109,7 +109,7 @@ class ElasticLF4(object):
             # File output streams
             base = os.path.join('/', 'data', 'output', platform,
                                 'p%d' % self.degree, 'uf%d' % self.tiling_uf)
-            if op2.MPI.comm.rank == 0:
+            if op2.MPI.COMM_WORLD.rank == 0:
                 if not os.path.exists(base):
                     os.makedirs(base)
                 sub_dirs = [d for d in os.listdir(base)
@@ -120,8 +120,8 @@ class ElasticLF4(object):
                                                      self.tiling_part if self.tiling_uf else 'None')
                 base = os.path.join(base, sub_dir)
                 os.makedirs(base)
-            op2.MPI.comm.barrier()
-            base = op2.MPI.comm.bcast(base, root=0)
+            op2.MPI.COMM_WORLD.barrier()
+            base = op2.MPI.COMM_WORLD.bcast(base, root=0)
             self.u_stream = File(os.path.join(base, 'velocity.pvd'))
             self.s_stream = File(os.path.join(base, 'stress.pvd'))
 
@@ -172,7 +172,9 @@ class ElasticLF4(object):
 
         # Copy the velocity mass matrix into a Dat
         vmat = self.imass_velocity.handle
-        arity = sum(self.U.topological.dofs_per_entity)*self.U.topological.dim
+        dofs_per_entity = self.U.fiat_element.entity_dofs()
+        dofs_per_entity = sum(self.mesh.make_dofs_per_plex_entity(dofs_per_entity))
+        arity = dofs_per_entity*self.U.topological.dim
         self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
         istart, iend = vmat.getOwnershipRange()
         idxs = [PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
@@ -185,7 +187,9 @@ class ElasticLF4(object):
 
         # Copy the stress mass matrix into a Dat
         smat = self.imass_stress.handle
-        arity = sum(self.S.topological.dofs_per_entity)*self.S.topological.dim
+        dofs_per_entity = self.S.fiat_element.entity_dofs()
+        dofs_per_entity = sum(self.mesh.make_dofs_per_plex_entity(dofs_per_entity))
+        arity = dofs_per_entity*self.S.topological.dim
         self.stress_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
         istart, iend = smat.getOwnershipRange()
         idxs = [PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
@@ -305,7 +309,8 @@ class ElasticLF4(object):
 
         # The number of dofs on each element is /ndofs*cdim/
         F_a_fs = F_a.function_space()
-        ndofs = sum(F_a_fs.topological.dofs_per_entity)
+        ndofs = F_a_fs.fiat_element.entity_dofs()
+        ndofs = sum(self.mesh.make_dofs_per_plex_entity(ndofs))
         cdim = F_a_fs.dim
         name = 'mat_vec_mul_kernel_%s' % F_a_fs.name
 
@@ -321,7 +326,7 @@ class ElasticLF4(object):
         body = [ast.Decl('const int', ast.Symbol('index'), init=ast.Symbol('i%%%d' % cdim)),
                 ast.Assign(ast.Symbol('C', ('i/%d' % cdim, 'index' % cdim)), '0.0'),
                 ast.c_for('j', ndofs, body).children[0]]
-        body = ast.Root([ast.c_for('i', ndofs*cdim, body).children[0]])
+        body = ast.Block([ast.c_for('i', ndofs*cdim, body).children[0]])
         funargs = [ast.Decl('double* restrict', 'A'),
                    ast.Decl('double *restrict *restrict', 'B'),
                    ast.Decl('double *restrict *', 'C')]
@@ -354,7 +359,7 @@ class ElasticLF4(object):
         if output:
             with timed_region('i/o'):
                 if(u):
-                    self.u_stream << u
+                    self.u_stream.write(u)
                 if(s):
                     # FIXME: Cannot currently write tensor valued fields to a VTU file.
                     # See https://github.com/firedrakeproject/firedrake/issues/538
@@ -376,20 +381,20 @@ class ElasticLF4(object):
         start = time()
         self.assemble_inverse_mass()
         end = time()
-        info("DONE! (Elapsed: ", round(end - start, 3), "s )")
-        op2.MPI.comm.barrier()
+        info("DONE! (Elapsed: %f s)" % round(end - start, 3))
+        op2.MPI.COMM_WORLD.barrier()
         info("Copying inverse mass matrix into a dat...")
         start = time()
         self.copy_massmatrix_into_dat()
         end = time()
-        info("DONE! (Elapsed: ", round(end - start, 3), "s )")
-        op2.MPI.comm.barrier()
+        info("DONE! (Elapsed: %f s)" % round(end - start, 3))
+        op2.MPI.COMM_WORLD.barrier()
 
         start = time()
         t = self.dt
         timestep = 0
         while t <= T + 1e-12:
-            if op2.MPI.comm.rank == 0 and timestep % self.output == 0:
+            if op2.MPI.COMM_WORLD.rank == 0 and timestep % self.output == 0:
                 info("t = %f, (timestep = %d)" % (t, timestep))
             with loop_chain("main1",
                             tile_size=self.tiling_size,
@@ -482,7 +487,7 @@ def cfl_dt(dx, Vp, courant_number):
     return (courant_number*dx)/Vp
 
 
-class ExplosiveSourceLF4():
+class ExplosiveSourceLF4(object):
 
     def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, cn=0.05,
                              mesh_file=None, output=1, poly_order=2, tiling=None):
@@ -499,30 +504,32 @@ class ExplosiveSourceLF4():
         else:
             num_solves = ElasticLF4.num_solves
 
-        with timed_region('mesh generation'):
-            if mesh_file:
-                mesh = Mesh(mesh_file)
-            else:
-                RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
+        if mesh_file:
+            mesh = Mesh(mesh_file)
+        else:
+            mesh = RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
 
-            kwargs = {}
-            if tiling['mode'] in ['tile', 'only_tile']:
-                s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
-                if part_mode == 'metis':
-                    kwargs['reorder'] = ('metis-rcm', mesh.num_cells() / tile_size)
-            else:
-                s_depth = 1
-            kwargs['s_depth'] = s_depth
-            tiling['s_depth'] = s_depth
+        set_log_level(INFO)
 
-            mesh.topology.init(**kwargs)
-            slope(mesh, debug=False)
+        kwargs = {}
+        if tiling['mode'] in ['tile', 'only_tile']:
+            s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
+            if part_mode == 'metis':
+                kwargs['reorder'] = ('metis-rcm', mesh.num_cells() / tile_size)
+        else:
+            s_depth = 1
+        # FIXME: need s_depth in firedrake to be able to use this
+        # kwargs['s_depth'] = s_depth
+        tiling['s_depth'] = s_depth
 
-            self.elastic = ElasticLF4(mesh, "DG", poly_order, dimension=2,
-                                      output=output, tiling=tiling)
+        mesh.topology.init(**kwargs)
+        slope(mesh, debug=False)
 
-        info("S-depth used:", s_depth)
-        info("Polynomial order:", poly_order)
+        # Instantiate the model
+        self.elastic = ElasticLF4(mesh, "DG", poly_order, 2, output, tiling)
+
+        info("S-depth used: %d" % s_depth)
+        info("Polynomial order: %d" % poly_order)
 
         # Constants
         self.elastic.density = 1.0
@@ -566,7 +573,7 @@ class ExplosiveSourceLF4():
 
         # Print runtime summary
         output_time(start, end,
-                    tofile=True,
+                    tofile=tiling['tofile'],
                     verbose=True,
                     meshid=("h%s" % h).replace('.', ''),
                     nloops=ElasticLF4.loop_chain_length*num_unroll,
@@ -574,8 +581,8 @@ class ExplosiveSourceLF4():
                     tile_size=tile_size,
                     extra_halo=extra_halo,
                     explicit_mode=explicit_mode,
-                    glb_maps=tiling['glb_maps'],
-                    prefetch=tiling['prefetch'],
+                    glb_maps=tiling['use_glb_maps'],
+                    prefetch=tiling['use_prefetch'],
                     coloring=tiling['coloring'],
                     poly_order=poly_order,
                     domain=os.path.splitext(os.path.basename(mesh.name))[0])
@@ -584,7 +591,7 @@ class ExplosiveSourceLF4():
 
 
 if __name__ == '__main__':
-    op2.init(log_level='WARNING')
+    set_log_level(INFO)
 
     # Switch on PyOP2 profiling
     configuration['profiling'] = True
@@ -603,6 +610,7 @@ if __name__ == '__main__':
         'use_glb_maps': args.glb_maps,
         'use_prefetch': args.prefetch,
         'log': args.log,
+        'tofile': args.tofile,
     }
 
     # Is it just a run to check correctness?
@@ -629,18 +637,18 @@ if __name__ == '__main__':
     # Set the input mesh
     if args.mesh_file:
         info("Using the unstructured mesh %s" % args.mesh_file)
-        kwargs = {'T': args.time_max, 'mesh_file': args.mesh_file, 'h': args.h, 'cn': args.cn,
+        kwargs = {'T': args.time_max, 'mesh_file': args.mesh_file, 'h': args.ms, 'cn': args.cn,
                   'output': args.output, 'poly_order': args.poly_order, 'tiling': tiling}
     else:
         Lx, Ly = eval(args.mesh_size)
-        info("Using the structured mesh with values (Lx,Ly,h)=%s" % str((Lx, Ly, args.h)))
-        kwargs = {'T': args.time_max, 'Lx': Lx, 'Ly': Ly, 'h': args.h, 'output': args.output,
+        info("Using the structured mesh with values (Lx,Ly,h)=%s" % str((Lx, Ly, args.ms)))
+        kwargs = {'T': args.time_max, 'Lx': Lx, 'Ly': Ly, 'h': args.ms, 'output': args.output,
                   'poly_order': args.poly_order, 'tiling': tiling}
 
-    info("h=%f, courant number=%f" % (args.h, args.cn))
+    info("h=%f, courant number=%f" % (args.ms, args.cn))
 
     if args.profile:
         cProfile.run('ExplosiveSourceLF4().explosive_source_lf4(**kwargs)',
-                     'log_rank%d.cprofile' % op2.MPI.comm.rank)
+                     'log_rank%d.cprofile' % op2.MPI.COMM_WORLD.rank)
     else:
         u1, s1 = ExplosiveSourceLF4().explosive_source_lf4(**kwargs)
