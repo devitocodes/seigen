@@ -23,23 +23,16 @@ def parser():
                    default='chunk', dest='part_mode')
     p.add_argument('-x', '--extra-halo', type=int, help='add extra halo layer',
                    default=0, dest='extra_halo')
-    p.add_argument('-v', '--verbose', help='print additional information',
-                   default=False, dest='verbose')
-    p.add_argument('-l', '--log', help='output inspector to a file',
-                   default=False, dest='log')
-    p.add_argument('-g', '--glb-maps', type=bool, help='use global maps (defaults to False)',
-                   default=False, dest='glb_maps')
-    p.add_argument('-r', '--prefetch', type=bool, help='use software prefetching',
-                   default=False, dest='prefetch')
-    p.add_argument('-c', '--coloring', type=bool, help='(default, rand, omp)',
+    p.add_argument('--verbose', help='print additional information', action='store_true')
+    p.add_argument('--log', help='output inspector to a file', action='store_true')
+    p.add_argument('--glb-maps', help='use global maps', action='store_true')
+    p.add_argument('--prefetch', help='use software prefetching', action='store_true')
+    p.add_argument('--coloring', help='set iteration set coloring (default, rand, omp)',
                    default='default', dest='coloring')
     # Correctness
-    p.add_argument('-d', '--debug', help='debug mode (defaults to False)',
-                   default=False, dest='debug')
-    p.add_argument('--profile', type=bool, help='enable Python-level profiling',
-                   default=False, dest='profile')
-    p.add_argument('--check', type=bool, help='check the numerical results',
-                   default=False, dest='check')
+    p.add_argument('--debug', help='execute in debug mode', action='store_true')
+    p.add_argument('--profile', help='enable Python-level profiling', action='store_true')
+    p.add_argument('--check', help='check the numerical results', action='store_true')
     # Simulation
     p.add_argument('-y', '--poly-order', type=int, help='the method\'s order in space',
                    default=1, dest='poly_order')
@@ -53,8 +46,12 @@ def parser():
     p.add_argument('-cn', '--courant-number', type=float,
                    help='set the courant number', default=0.05, dest='cn')
     p.add_argument('--time-max', type=float, help='set the simulation duration', default=2.5)
-    p.add_argument('-tf', '--to-file', type=bool, help='store timings to file',
-                   default=True, dest='tofile')
+    p.add_argument('--no-tofile', help='do not store timings to file',
+                   dest='tofile', action='store_false')
+    # Set default values
+    p.set_defaults(verbose=False, log=False, glb_maps=False, prefetch=False, debug=False,
+                   profile=False, check=False, tofile=True)
+
     return p.parse_args()
 
 
@@ -74,11 +71,10 @@ def output_time(start, end, **kwargs):
     prefetch = 'yes' if kwargs.get('prefetch', False) else 'no'
     backend = os.environ.get("SLOPE_BACKEND", "SEQUENTIAL")
 
+    avg = lambda v: (sum(v) / len(v)) if v else 0.0
+
     # Where do I store the output ?
-    # defaults to /firedrake/demos/tiling/...
-    output_dir = ""
-    if "FIREDRAKE_DIR" in os.environ:
-        output_dir = os.path.join(os.environ["FIREDRAKE_DIR"], "demos", "tiling")
+    output_dir = os.getcwd()
 
     # Find number of processes, and number of threads per process
     num_procs = MPI.COMM_WORLD.size
@@ -108,9 +104,12 @@ def output_time(start, end, **kwargs):
 
     # Determine ACT - Average Compute Time, pure kernel execution -
     # and ACCT - Average Compute and Communication Time (ACS + MPI cost)
-    avg = lambda v: (sum(v) / len(v)) if v else 0.0
-    compute_time = Timer.get_timers().get('ParLoop kernel', 'VOID').total
-    mpi_time = Timer.get_timers().get('ParLoop halo exchange end', 'VOID').total
+
+    # FIXME: compute_time and mpi_time currently unavailable through PETSc' timers
+    # compute_time = Timer.get_timers().get('ParLoop kernel', 'VOID').total
+    # mpi_time = Timer.get_timers().get('ParLoop halo exchange end', 'VOID').total
+    compute_time = end - start
+    mpi_time = end - start
 
     if MPI.COMM_WORLD.rank in range(1, num_procs):
         MPI.COMM_WORLD.isend([compute_time, mpi_time], dest=0)
@@ -122,8 +121,8 @@ def output_time(start, end, **kwargs):
         ACT = round(avg(compute_times), 3)
         AMT = round(avg(mpi_times), 3)
         ACCT = ACT + AMT
-        print "Average Compute Time: ", ACT, "s"
-        print "Average Compute and Communication Time: ", ACCT, "s"
+        # print "Average Compute Time: ", ACT, "s"
+        # print "Average Compute and Communication Time: ", ACCT, "s"
 
     # Determine if a multi-node execution
     is_multinode = False
@@ -193,7 +192,8 @@ def output_time(start, end, **kwargs):
                 f.write(lines)
                 f.truncate()
 
-    if verbose:
+    # FIXME: compute_time and mpi_time unavailable
+    if verbose and False:
         for i in range(num_procs):
             if MPI.COMM_WORLD.rank == i:
                 tot_time = compute_time + mpi_time

@@ -405,6 +405,7 @@ class ElasticLF4(object):
                             use_glb_maps=self.tiling_glb_maps,
                             use_prefetch=self.tiling_prefetch,
                             coloring=self.tiling_coloring,
+                            ignore_war=True,
                             log=self.tiling_log):
                 # In case the source is time-dependent, update the time 't' here.
                 if(self.source):
@@ -558,7 +559,7 @@ class ExplosiveSourceLF4(object):
         self.elastic.source = self.elastic.source_expression
 
         # Absorption
-        F = FunctionSpace(mesh, "DG", poly_order, name='F')
+        F = FunctionSpace(mesh, "DG", 4, name='F')
         self.elastic.absorption_function = Function(F)
         self.elastic.absorption = Expression("x[0] <= 20 || x[0] >= %f || x[1] <= 20.0 ? 1000 : 0" % (Lx - 20,))
 
