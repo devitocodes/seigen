@@ -5,6 +5,7 @@ import platform
 import math
 
 from pyop2.mpi import MPI
+from firedrake.petsc import PETSc
 # from pyop2.profiling import Timer
 
 
@@ -48,6 +49,8 @@ def parser():
     p.add_argument('--time-max', type=float, help='set the simulation duration', default=2.5)
     p.add_argument('--no-tofile', help='do not store timings to file',
                    dest='tofile', action='store_false')
+    # Forward to petsc4py
+    p.add_argument('-log_view', help='tell PETSc to generate a log', action='store_true')
     # Set default values
     p.set_defaults(verbose=False, log=False, glb_maps=False, prefetch=False, debug=False,
                    profile=False, check=False, tofile=True)
@@ -102,14 +105,22 @@ def output_time(start, end, **kwargs):
         tot = round(max_end - min_start, 3)
         print "Time stepping: ", tot, "s"
 
-    # Determine ACT - Average Compute Time, pure kernel execution -
-    # and ACCT - Average Compute and Communication Time (ACS + MPI cost)
-
-    # FIXME: compute_time and mpi_time currently unavailable through PETSc' timers
-    # compute_time = Timer.get_timers().get('ParLoop kernel', 'VOID').total
-    # mpi_time = Timer.get_timers().get('ParLoop halo exchange end', 'VOID').total
-    compute_time = end - start
-    mpi_time = end - start
+    # Determine:
+    # ACT - Average Compute Time, pure kernel execution -
+    # ACCT - Average Compute and Communication Time (ACS + MPI cost)
+    # For this, first dump PETSc performance log info to temporary file as
+    # currently there's no other clean way of accessing the times in petsc4py
+    filename = os.path.join(output_dir, 'seigenlog.py')
+    vwr = PETSc.Viewer().createASCII(filename)
+    vwr.pushFormat(PETSc.Viewer().Format().ASCII_INFO_DETAIL)
+    PETSc.Log().view(vwr)
+    PETSc.Options().delValue('log_view')
+    with open(filename, 'r') as f:
+        content = f.read()
+    exec(content) in globals(), locals()
+    os.remove(filename)
+    compute_time = Stages['Main Stage']['ParLoopCKernel'][0]['time']
+    mpi_time = Stages['Main Stage']['ParLoopHaloEnd'][0]['time']
 
     if MPI.COMM_WORLD.rank in range(1, num_procs):
         MPI.COMM_WORLD.isend([compute_time, mpi_time], dest=0)
@@ -121,8 +132,8 @@ def output_time(start, end, **kwargs):
         ACT = round(avg(compute_times), 3)
         AMT = round(avg(mpi_times), 3)
         ACCT = ACT + AMT
-        # print "Average Compute Time: ", ACT, "s"
-        # print "Average Compute and Communication Time: ", ACCT, "s"
+        print "Average Compute Time: ", ACT, "s"
+        print "Average Compute and Communication Time: ", ACCT, "s"
 
     # Determine if a multi-node execution
     is_multinode = False
@@ -192,8 +203,7 @@ def output_time(start, end, **kwargs):
                 f.write(lines)
                 f.truncate()
 
-    # FIXME: compute_time and mpi_time unavailable
-    if verbose and False:
+    if verbose:
         for i in range(num_procs):
             if MPI.COMM_WORLD.rank == i:
                 tot_time = compute_time + mpi_time
