@@ -21,7 +21,7 @@ from pyop2.utils import cached_property
 from pyop2.profiling import timed_region
 from pyop2.base import _trace, Dat, DataSet
 from pyop2.configuration import configuration
-from pyop2.fusion.interface import loop_chain, loop_chain_tag
+from pyop2.fusion.interface import loop_chain
 from pyop2.logger import info, set_log_level, INFO
 
 import coffee.base as ast
@@ -337,7 +337,6 @@ class ElasticLF4(object):
 
         return fundecl
 
-    @loop_chain_tag
     def solve(self, rhs, matrix_asdat, result):
         F_a = assemble(rhs)
         ast_matmul = self.ast_matmul(F_a)
@@ -524,7 +523,7 @@ class ExplosiveSourceLF4(object):
         tiling['s_depth'] = s_depth
 
         mesh.topology.init(**kwargs)
-        slope(mesh, debug=False)
+        slope(mesh, debug=True)
 
         # Instantiate the model
         self.elastic = ElasticLF4(mesh, "DG", poly_order, 2, output, tiling)
