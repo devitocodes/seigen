@@ -118,7 +118,6 @@ def output_time(start, end, **kwargs):
     with open(filename, 'r') as f:
         content = f.read()
     exec(content) in globals(), locals()
-    os.remove(filename)
     compute_time = Stages['Main Stage']['ParLoopCKernel'][0]['time']
     mpi_time = Stages['Main Stage']['ParLoopHaloEnd'][0]['time']
 
@@ -212,6 +211,10 @@ def output_time(start, end, **kwargs):
                     (i, compute_time, mpi_time, tot_time, offC, (offC / (end - start))*100, (mpi_time / (end - start))*100)
                 sys.stdout.flush()
             MPI.COMM_WORLD.barrier()
+
+    # Clean up
+    if MPI.COMM_WORLD.rank == 0:
+        os.remove(filename)
 
 
 def calculate_sdepth(num_solves, num_unroll, extra_halo):
