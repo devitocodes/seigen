@@ -46,7 +46,10 @@ if [ "$1" == "onlylog" ]; then
     mkdir -p all-logs
 fi
 
-MPICMD="mpirun -np 4 --bind-to-core python wave_elastic.py $OPTS"
+TSFC_CACHE=$HOME/firedrake-cache/tsfc-cache
+PYOP2_CACHE=$HOME/firedrake-cache/pyop2-cache
+MPICMD="mpirun -np 4 --bind-to-core -x FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE -x PYOP2_CACHE_DIR=$PYOP2_CACHE"
+MPICMD="$MPICMD python explosive_source.py $OPTS"
 
 for poly in ${polys[@]}
 do
