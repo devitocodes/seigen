@@ -80,6 +80,7 @@ def output_time(start, end, **kwargs):
     output_dir = os.getcwd()
 
     # Find number of processes, and number of threads per process
+    rank = MPI.COMM_WORLD.rank
     num_procs = MPI.COMM_WORLD.size
     num_threads = int(os.environ.get("OMP_NUM_THREADS", 1)) if backend == 'OMP' else 1
 
@@ -94,9 +95,9 @@ def output_time(start, end, **kwargs):
         versions = ['mpi_openmp']
 
     # Determine the total execution time (Python + kernel execution + MPI cost
-    if MPI.COMM_WORLD.rank in range(1, num_procs):
+    if rank in range(1, num_procs):
         MPI.COMM_WORLD.isend([start, end], dest=0)
-    elif MPI.COMM_WORLD.rank == 0:
+    elif rank == 0:
         starts, ends = [0]*num_procs, [0]*num_procs
         starts[0], ends[0] = start, end
         for i in range(1, num_procs):
@@ -105,29 +106,22 @@ def output_time(start, end, **kwargs):
         tot = round(max_end - min_start, 3)
         print "Time stepping: ", tot, "s"
 
-    # Determine:
+    # Determine (on rank 0):
     # ACT - Average Compute Time, pure kernel execution -
     # ACCT - Average Compute and Communication Time (ACS + MPI cost)
     # For this, first dump PETSc performance log info to temporary file as
     # currently there's no other clean way of accessing the times in petsc4py
-    filename = os.path.join(output_dir, 'seigenlog.py')
-    vwr = PETSc.Viewer().createASCII(filename)
+    logfile = os.path.join(output_dir, 'seigenlog.py')
+    vwr = PETSc.Viewer().createASCII(logfile)
     vwr.pushFormat(PETSc.Viewer().Format().ASCII_INFO_DETAIL)
     PETSc.Log().view(vwr)
     PETSc.Options().delValue('log_view')
-    with open(filename, 'r') as f:
-        content = f.read()
-    exec(content) in globals(), locals()
-    compute_time = Stages['Main Stage']['ParLoopCKernel'][0]['time']
-    mpi_time = Stages['Main Stage']['ParLoopHaloEnd'][0]['time']
-
-    if MPI.COMM_WORLD.rank in range(1, num_procs):
-        MPI.COMM_WORLD.isend([compute_time, mpi_time], dest=0)
-    elif MPI.COMM_WORLD.rank == 0:
-        compute_times, mpi_times = [0]*num_procs, [0]*num_procs
-        compute_times[0], mpi_times[0] = compute_time, mpi_time
-        for i in range(1, num_procs):
-            compute_times[i], mpi_times[i] = MPI.COMM_WORLD.recv(source=i)
+    if rank == 0:
+        with open(logfile, 'r') as f:
+            content = f.read()
+        exec(content) in globals(), locals()
+        compute_times = [Stages['Main Stage']['ParLoopCKernel'][i]['time'] for i in range(num_procs)]
+        mpi_times = [Stages['Main Stage']['ParLoopHaloEnd'][i]['time'] for i in range(num_procs)]
         ACT = round(avg(compute_times), 3)
         AMT = round(avg(mpi_times), 3)
         ACCT = ACT + AMT
@@ -137,9 +131,9 @@ def output_time(start, end, **kwargs):
     # Determine if a multi-node execution
     is_multinode = False
     platformname = platform.node().split('.')[0]
-    if MPI.COMM_WORLD.rank in range(1, num_procs):
+    if rank in range(1, num_procs):
         MPI.COMM_WORLD.isend(platformname, dest=0)
-    elif MPI.COMM_WORLD.rank == 0:
+    elif rank == 0:
         all_platform_names = [None]*num_procs
         all_platform_names[0] = platformname
         for i in range(1, num_procs):
@@ -176,20 +170,20 @@ def output_time(start, end, **kwargs):
                 new_values.append(new_v)
         return tuple(new_values)
 
-    if MPI.COMM_WORLD.rank == 0 and tofile:
+    if rank == 0 and tofile:
         name = os.path.splitext(os.path.basename(sys.argv[0]))[0]  # Cut away the extension
         for version in versions:
-            filename = os.path.join(output_dir, "times", name, "poly_%d" % poly_order, domain,
+            timefile = os.path.join(output_dir, "times", name, "poly_%d" % poly_order, domain,
                                     meshid, version, platformname, "np%d_nt%d.txt" % (num_procs, num_threads))
             # Create directory and file (if not exist)
-            if not os.path.exists(os.path.dirname(filename)):
-                os.makedirs(os.path.dirname(filename))
-            if not os.path.exists(filename):
-                open(filename, 'a').close()
+            if not os.path.exists(os.path.dirname(timefile)):
+                os.makedirs(os.path.dirname(timefile))
+            if not os.path.exists(timefile):
+                open(timefile, 'a').close()
             # Read the old content, add the new time value, order
             # everything based on <execution time, #loops tiled>, write
             # back to the file (overwriting existing content)
-            with open(filename, "r+") as f:
+            with open(timefile, "r+") as f:
                 lines = [line.split('|') for line in f if line.strip()][2:]
                 lines = [fix(i) for i in lines]
                 lines += [(tot, ACT, ACCT, mode, tile_size, partitioning, extra_halo, glb_maps, coloring, prefetch)]
@@ -202,19 +196,20 @@ def output_time(start, end, **kwargs):
                 f.write(lines)
                 f.truncate()
 
-    if verbose:
+    if rank == 0 and verbose:
         for i in range(num_procs):
-            if MPI.COMM_WORLD.rank == i:
-                tot_time = compute_time + mpi_time
-                offC = (end - start) - tot_time
-                print "Rank %d: compute=%.2fs, mpi=%.2fs -- tot=%.2fs (py=%.2fs, %.2f%%; mpi_oh=%.2f%%)" % \
-                    (i, compute_time, mpi_time, tot_time, offC, (offC / (end - start))*100, (mpi_time / (end - start))*100)
-                sys.stdout.flush()
-            MPI.COMM_WORLD.barrier()
+            tot_time = compute_times[i] + mpi_times[i]
+            offC = (ends[i] - starts[i]) - tot_time
+            offCperc = (offC / (ends[i] - starts[i]))*100
+            mpiPerc = (mpi_times[i] / (ends[i] - starts[i]))*100
+            print "Rank %d: compute=%.2fs, mpi=%.2fs -- tot=%.2fs (py=%.2fs, %.2f%%; mpi_oh=%.2f%%)" % \
+                (i, compute_times[i], mpi_times[i], tot_time, offC, offCperc, mpiPerc)
+        sys.stdout.flush()
+    MPI.COMM_WORLD.barrier()
 
     # Clean up
-    if MPI.COMM_WORLD.rank == 0:
-        os.remove(filename)
+    if rank == 0:
+        os.remove(logfile)
 
 
 def calculate_sdepth(num_solves, num_unroll, extra_halo):
