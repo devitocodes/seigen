@@ -3,10 +3,34 @@ export SLOPE_BACKEND=SEQUENTIAL
 
 OPTS="--output 10000 --time_max 0.01 --to-file False"
 TILE_OPTS="--fusion-mode only_tile --coloring default"
+TMPDIR=/tmp
 
-LOGGER=$WORK"/logger_"$PBS_JOBNAME"_multinode.txt"
+LOGGER=$TMPDIR"/logger_"$nodename"_cache_populator.txt"
 rm -f $LOGGER
 touch $LOGGER
+
+export FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TMPDIR/tsfc-cache
+export PYOP2_CACHE_DIR=$TMPDIR/pyop2-cache
+
+# Recognized systems: [Erebus (0), CX1-Ivy (1), CX1-Haswell (2)]
+if [ "$nodename" -eq 0 ]; then
+    nodename="erebus-sandyb"
+    MPICMD="mpirun -np 4 --bind-to-core -x FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE -x PYOP2_CACHE_DIR=$PYOP2_CACHE -x NODENAME=$nodename"
+elif [ "$nodename" -eq 1 ]; then
+    nodename="cx1-ivyb"
+    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+elif [ "$nodename" -eq 2 ]; then
+    nodename="cx1-haswell"
+    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+else
+    echo "Unrecognized nodename: $nodename"
+    echo "Run as: nodename=integer h=float poly=integer launcher.sh"
+    exit
+fi
+
+MPICMD="$MPICMD python explosive_source.py $OPTS"
+
+declare -a polys=($poly)
 
 declare -a opts_em1=("")
 declare -a opts_em2=("")
@@ -14,21 +38,14 @@ declare -a opts_em3=("")
 
 declare -a part_all=("chunk")
 
-declare -a mesh_p1=("--mesh-size (50.0,25.0) --mesh-spacing $mesh")
-declare -a mesh_p2=("--mesh-size (30.0,15.0) --mesh-spacing $mesh")
-declare -a mesh_p3=("--mesh-size (30.0,15.0) --mesh-spacing $mesh")
-declare -a mesh_p4=("--mesh-size (30.0,15.0) --mesh-spacing $mesh")
+declare -a mesh_p1=("--mesh-size (50.0,25.0) --mesh-spacing $h")
+declare -a mesh_p2=("--mesh-size (30.0,15.0) --mesh-spacing $h")
+declare -a mesh_p3=("--mesh-size (30.0,15.0) --mesh-spacing $h")
+declare -a mesh_p4=("--mesh-size (30.0,15.0) --mesh-spacing $h")
 
 declare -a mesh_default=("--mesh-size (300.0,150.0) --mesh-spacing 1.0")
 
 declare -a em_all=(1 2 3)
-
-TMPDIR=/tmp
-export FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TMPDIR/tsfc-cache
-export PYOP2_CACHE_DIR=$TMPDIR/pyop2-cache
-
-MPICMD="mpirun -np 4 -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $FIREDRAKE_TSFC_KERNEL_CACHE_DIR -env PYOP2_CACHE_DIR $PYOP2_CACHE_DIR"
-MPICMD="$MPICMD python explosive_source.py $OPTS"
 
 # Populate the local cache
 for poly in ${polys[@]}

@@ -7,7 +7,9 @@ mkdir -p output
 OPTS="-log_view --output 10000"
 TILE_OPTS="--fusion-mode only_tile --coloring default"
 LOG=""
-EXTRA_OUT=""
+
+TSFC_CACHE=$HOME/firedrake-cache/tsfc-cache
+PYOP2_CACHE=$HOME/firedrake-cache/pyop2-cache
 
 export OMP_NUM_THREADS=1
 export SLOPE_BACKEND=SEQUENTIAL
@@ -29,31 +31,48 @@ declare -a ts_p4=(20 45 70)
 # Partition modes for each poly order
 declare -a partitionings=("chunk")
 
-# Meshes
-declare -a meshes=("--mesh-size (300.0,150.0) --mesh-spacing 1.0"
-                   "--mesh-size (300.0,150.0) --mesh-spacing 1.2")
+# Meshe
+declare -a meshes=("--mesh-size (300.0,150.0) --mesh-spacing $h")
 
 # The polynomial orders tested
-declare -a polys=(1 2 3 4)
+if [ -z "$poly" ]; then
+    echo "Warning: testing all polynomial orders [1, 2, 3, 4]"
+    declare -a polys=(1 2 3 4)
+else
+    declare -a polys=($poly)
+fi
+
+# Recognized systems: [Erebus (0), CX1-Ivy (1), CX1-Haswell (2)]
+if [ "$nodename" -eq 0 ]; then
+    nodename="erebus-sandyb"
+    MPICMD="mpirun -np 4 --bind-to-core -x FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE -x PYOP2_CACHE_DIR=$PYOP2_CACHE -x NODENAME=$nodename"
+elif [ "$nodename" -eq 1 ]; then
+    nodename="cx1-ivyb"
+    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+elif [ "$nodename" -eq 2 ]; then
+    nodename="cx1-haswell"
+    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+else
+    echo "Unrecognized nodename: $nodename"
+    echo "Run as: nodename=integer h=float poly=integer launcher.sh"
+    exit
+fi
+
+MPICMD="$MPICMD python explosive_source.py $OPTS"
 
 # If only logging tiling stuff, tweak a few things to run only what is strictly necessary
 if [ "$1" == "onlylog" ]; then
     declare -a polys=(2)
     declare -a mesh_p2=("--mesh-size (300.0,150.0,1.2)")
     declare -a part_p2=("chunk")
-    LOG="--log True --time_max 0.05"
+    LOG="--log --time_max 0.05"
     EXTRA_OUT="(Just logging!)"
     mkdir -p all-logs
 fi
 
-TSFC_CACHE=$HOME/firedrake-cache/tsfc-cache
-PYOP2_CACHE=$HOME/firedrake-cache/pyop2-cache
-MPICMD="mpirun -np 4 --bind-to-core -x FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE -x PYOP2_CACHE_DIR=$PYOP2_CACHE"
-MPICMD="$MPICMD python explosive_source.py $OPTS"
-
 for poly in ${polys[@]}
 do
-    output_file="output/output_p"$poly".txt"
+    output_file="output/output_p"$poly"_h"$h"_"$nodename".txt"
     rm -f $output_file
     touch $output_file
     echo "Polynomial order "$poly
