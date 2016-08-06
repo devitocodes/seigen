@@ -9,8 +9,8 @@ LOGGER=$TMPDIR"/logger_"$nodename"_cache_populator.txt"
 rm -f $LOGGER
 touch $LOGGER
 
-export FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TMPDIR/tsfc-cache
-export PYOP2_CACHE_DIR=$TMPDIR/pyop2-cache
+export TSFC_CACHE=$TMPDIR/tsfc-cache
+export PYOP2_CACHE=$TMPDIR/pyop2-cache
 
 # Recognized systems: [Erebus (0), CX1-Ivy (1), CX1-Haswell (2)]
 if [ "$nodename" -eq 0 ]; then
@@ -82,5 +82,5 @@ rm $LOGGER
 # Copy the local cache to the shared file system
 mkdir -p $HOME/firedrake-cache/pyop2-cache
 mkdir -p $HOME/firedrake-cache/tsfc-cache
-cp -n $PYOP2_CACHE_DIR/* $HOME/firedrake-cache/pyop2-cache
-cp -n $FIREDRAKE_TSFC_KERNEL_CACHE_DIR/* $HOME/firedrake-cache/tsfc-cache
+cp -n $PYOP2_CACHE/* $HOME/firedrake-cache/pyop2-cache
+cp -n $TSFC_CACHE/* $HOME/firedrake-cache/tsfc-cache

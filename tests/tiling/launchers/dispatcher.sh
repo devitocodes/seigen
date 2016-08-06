@@ -22,7 +22,7 @@ if [ "$mode" == "populator" ]; then
     for poly in 1 2 3 4; do
         for h in ${cache[@]}; do
             if [ "$node" == "erebus" ]; then
-                nodename=$nodeid poly=$poly h=$h ./launchers/cache_populator
+                nodename=$nodeid poly=$poly h=$h ./launchers/cache_populator.sh
             elif [ "$node" == "cx1-ivy" ]; then
                 qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=20:mem=60gb:ivyb=true launchers/cache_populator.sh
             elif [ "$node" == "cx1-haswell" ]; then
