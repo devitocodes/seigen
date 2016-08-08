@@ -1,8 +1,8 @@
 #!/bin/bash
 
 if [ "$node" == "erebus" ]; then
-    declare -a cache=(1.0 1.2)
-    declare -a snmesh=(1.0 1.2)
+    declare -a cache=(1.2 1.4)
+    declare -a snmesh=(1.2 1.4)
     nodeid=0
 elif [ "$node" == "cx1-ivy" ]; then
     declare -a cache=(0.6 0.45 0.3 0.225 0.15 0.115)
