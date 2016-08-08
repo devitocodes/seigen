@@ -106,6 +106,10 @@ def output_time(start, end, **kwargs):
         tot = round(max_end - min_start, 3)
         print "Time stepping: ", tot, "s"
 
+    # Exit if user doesn't want timings to be recorded
+    if not tofile:
+        return
+
     # Determine (on rank 0):
     # ACT - Average Compute Time, pure kernel execution -
     # ACCT - Average Compute and Communication Time (ACS + MPI cost)
@@ -170,7 +174,7 @@ def output_time(start, end, **kwargs):
                 new_values.append(new_v)
         return tuple(new_values)
 
-    if rank == 0 and tofile:
+    if rank == 0:
         name = os.path.splitext(os.path.basename(sys.argv[0]))[0]  # Cut away the extension
         for version in versions:
             timefile = os.path.join(output_dir, "times", name, "poly_%d" % poly_order, domain,

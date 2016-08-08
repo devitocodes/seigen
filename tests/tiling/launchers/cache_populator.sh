@@ -1,7 +1,9 @@
+mkdir -p output
+
 export OMP_NUM_THREADS=1
 export SLOPE_BACKEND=SEQUENTIAL
 
-OPTS="--output 10000 --time_max 0.01 --to-file False"
+OPTS="--output 10000 --time-max 0.05 --no-tofile"
 TILE_OPTS="--fusion-mode only_tile --coloring default"
 TMPDIR=/tmp
 
@@ -50,6 +52,9 @@ declare -a em_all=(1 2 3)
 # Populate the local cache
 for poly in ${polys[@]}
 do
+    output_file="output/populator_p"$poly"_h"$h"_"$nodename".txt"
+    rm -f $output_file
+    touch $output_file
     echo "Populate polynomial order "$poly >> $LOGGER
     mesh_p="mesh_p$poly[@]"
     meshes=( "${!mesh_p}" )
@@ -57,8 +62,8 @@ do
     do
         echo "    Populate "$mesh >> $LOGGER
         echo "        Populate Untiled ..." >> $LOGGER
-        $MPICMD --poly-order $poly $mesh --num-unroll 0
-        $MPICMD --poly-order $poly $mesh_default --num-unroll 0  # Create the expression kernels
+        $MPICMD --poly-order $poly $mesh --num-unroll 0 1>> $output_file 2>> $output_file
+        $MPICMD --poly-order $poly $mesh_default --num-unroll 0 1>> $output_file 2>> $output_file  # Create the expression kernels
         for p in ${part_all[@]}
         do
             for em in ${em_all[@]}
@@ -69,8 +74,8 @@ do
                 do
                     ts=100000
                     echo "        Populate Tiled (pm="$p", ts="$ts", em="$em") ..." >> $LOGGER
-                    $MPICMD --poly-order $poly $mesh --num-unroll 1 --tile-size $ts --part-mode $p --explicit-mode $em $TILE_OPTS $opt
-                    $MPICMD --poly-order $poly $mesh_default --num-unroll 1 --tile-size $ts --part-mode $p --explicit-mode $em $TILE_OPTS $opt
+                    $MPICMD --poly-order $poly $mesh --num-unroll 1 --tile-size $ts --part-mode $p --explicit-mode $em $TILE_OPTS $opt 1>> $output_file 2>> $output_file
+                    $MPICMD --poly-order $poly $mesh_default --num-unroll 1 --tile-size $ts --part-mode $p --explicit-mode $em $TILE_OPTS $opt 1>> $output_file 2>> $output_file
                 done
             done
         done
