@@ -34,9 +34,9 @@ MPICMD="$MPICMD python explosive_source.py $OPTS"
 
 declare -a polys=($poly)
 
-declare -a opts_em1=("--glb-maps True")
-declare -a opts_em2=("--glb-maps True")
-declare -a opts_em3=("--glb-maps True")
+declare -a opts_em1=("--glb-maps")
+declare -a opts_em2=("--glb-maps")
+declare -a opts_em3=("--glb-maps")
 
 declare -a part_all=("chunk")
 

@@ -18,9 +18,9 @@ export SLOPE_BACKEND=SEQUENTIAL
 declare -a em_all=(1 2 3)
 
 # Extra options for each mode
-declare -a opts_em1=("--glb-maps True")
-declare -a opts_em2=("--glb-maps True")
-declare -a opts_em3=("--glb-maps True")
+declare -a opts_em1=("--glb-maps")
+declare -a opts_em2=("--glb-maps")
+declare -a opts_em3=("--glb-maps")
 
 # Tile sizes for each poly order
 declare -a ts_p1=(140 250 320 400)
