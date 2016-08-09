@@ -558,7 +558,7 @@ class ExplosiveSourceLF4(object):
         self.elastic.source = self.elastic.source_expression
 
         # Absorption
-        F = FunctionSpace(mesh, "DG", 4, name='F')
+        F = FunctionSpace(mesh, "DG", poly_order, name='F')
         self.elastic.absorption_function = Function(F)
         self.elastic.absorption = Expression("x[0] <= 20 || x[0] >= %f || x[1] <= 20.0 ? 1000 : 0" % (Lx - 20,))
 
