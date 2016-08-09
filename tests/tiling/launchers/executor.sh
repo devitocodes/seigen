@@ -1,7 +1,5 @@
 #!/bin/bash
 
-rm -rf /data/output/
-
 mkdir -p output
 
 OPTS="-log_view --output 10000"

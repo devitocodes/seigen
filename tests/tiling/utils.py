@@ -6,7 +6,6 @@ import math
 
 from pyop2.mpi import MPI
 from firedrake.petsc import PETSc
-# from pyop2.profiling import Timer
 
 
 def parser():
