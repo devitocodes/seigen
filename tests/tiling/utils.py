@@ -48,6 +48,9 @@ def parser():
     p.add_argument('--time-max', type=float, help='set the simulation duration', default=2.5)
     p.add_argument('--no-tofile', help='do not store timings to file',
                    dest='tofile', action='store_false')
+    # Kernel optimization
+    p.add_argument('--coffee-opt', help='kernel optimization level', dest='coffee_opt',
+                   choices=['O0', 'O1', 'O2', 'O3'], action='store', default='O2')
     # Forward to petsc4py
     p.add_argument('-log_view', help='tell PETSc to generate a log', action='store_true')
     # Set default values

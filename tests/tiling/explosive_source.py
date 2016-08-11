@@ -20,7 +20,6 @@ from firedrake.petsc import PETSc
 from pyop2.utils import cached_property
 from pyop2.profiling import timed_region
 from pyop2.base import _trace, Dat, DataSet
-from pyop2.configuration import configuration
 from pyop2.fusion.interface import loop_chain
 from pyop2.logger import info, set_log_level, INFO
 
@@ -593,9 +592,6 @@ class ExplosiveSourceLF4(object):
 if __name__ == '__main__':
     set_log_level(INFO)
 
-    # Switch on PyOP2 profiling
-    configuration['profiling'] = True
-
     # Parse the input
     args = parser()
     tiling = {
@@ -612,6 +608,9 @@ if __name__ == '__main__':
         'log': args.log,
         'tofile': args.tofile,
     }
+
+    # Set the kernel optimizaation level (default: O2)
+    parameters['coffee']['optlevel'] = args.coffee_opt
 
     # Is it just a run to check correctness?
     if args.check:
