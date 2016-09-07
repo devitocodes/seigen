@@ -1,3 +1,9 @@
+#!/bin/bash
+
+cd $HOME/NewFiredrake
+source setenv.env
+cd $SEIGEN_DIR
+
 mkdir -p output
 
 export OMP_NUM_THREADS=1
@@ -5,7 +11,6 @@ export SLOPE_BACKEND=SEQUENTIAL
 
 OPTS="--output 10000 --time-max 0.05 --no-tofile"
 TILE_OPTS="--fusion-mode only_tile --coloring default"
-TMPDIR=/tmp
 
 LOGGER=$TMPDIR"/logger_"$nodename"_cache_populator.txt"
 rm -f $LOGGER

@@ -1,5 +1,9 @@
 #!/bin/bash
 
+cd $HOME/NewFiredrake
+source setenv.env
+cd $SEIGEN_DIR
+
 mkdir -p output
 
 OPTS="-log_view --output 10000"
