@@ -106,7 +106,7 @@ class ElasticLF4(object):
 
         if self.output:
             # File output streams
-            base = os.path.join('/', 'data', 'output', platform,
+            base = os.path.join('/', 'tmp', 'data', 'output', platform,
                                 'p%d' % self.degree, 'uf%d' % self.tiling_uf)
             if op2.MPI.COMM_WORLD.rank == 0:
                 if not os.path.exists(base):
