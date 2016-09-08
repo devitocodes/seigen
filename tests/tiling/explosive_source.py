@@ -11,9 +11,6 @@ import sys
 import os
 import cProfile
 
-import platform
-platform = platform.node().split('.')[0]
-
 from firedrake import *
 from firedrake.petsc import PETSc
 
@@ -106,6 +103,7 @@ class ElasticLF4(object):
 
         if self.output:
             # File output streams
+            platform = os.environ.get('NODENAME', 'unknown')
             base = os.path.join('/', 'work', 'fl1612', 'output', platform,
                                 'p%d' % self.degree, 'uf%d' % self.tiling_uf)
             if op2.MPI.COMM_WORLD.rank == 0:

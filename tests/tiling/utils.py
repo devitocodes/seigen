@@ -1,7 +1,6 @@
 import sys
 import os
 import argparse
-import platform
 import math
 
 from pyop2.mpi import MPI
@@ -135,20 +134,7 @@ def output_time(start, end, **kwargs):
         print "Average Compute and Communication Time: ", ACCT, "s"
 
     # Determine if a multi-node execution
-    is_multinode = False
-    platformname = platform.node().split('.')[0]
-    if rank in range(1, num_procs):
-        MPI.COMM_WORLD.isend(platformname, dest=0)
-    elif rank == 0:
-        all_platform_names = [None]*num_procs
-        all_platform_names[0] = platformname
-        for i in range(1, num_procs):
-            all_platform_names[i] = MPI.COMM_WORLD.recv(source=i)
-        if any(i != platformname for i in all_platform_names):
-            is_multinode = True
-        if is_multinode:
-            cluster_island = platformname.split('-')
-            platformname = "%s_%s" % (cluster_island[0], cluster_island[1])
+    platform = os.environ.get('NODENAME', 'unknown')
 
     # Adjust /tile_size/ and /version/ based on the problem that was actually run
     assert nloops >= 0
@@ -180,7 +166,7 @@ def output_time(start, end, **kwargs):
         name = os.path.splitext(os.path.basename(sys.argv[0]))[0]  # Cut away the extension
         for version in versions:
             timefile = os.path.join(output_dir, "times", name, "poly_%d" % poly_order, domain,
-                                    meshid, version, platformname, "np%d_nt%d.txt" % (num_procs, num_threads))
+                                    meshid, version, platform, "np%d_nt%d.txt" % (num_procs, num_threads))
             # Create directory and file (if not exist)
             if not os.path.exists(os.path.dirname(timefile)):
                 os.makedirs(os.path.dirname(timefile))
