@@ -6,7 +6,8 @@ from firedrake.petsc import PETSc
 from os import path, getcwd
 from itertools import product
 from collections import OrderedDict
-from opescibench import Executor
+from opescibench import Executor, Plotter
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
 
 parameters["pyop2_options"]["profiling"] = True
 parameters["coffee"]["O2"] = False
@@ -49,7 +50,6 @@ class EigenmodeExecutor(Executor):
         vwr = PETSc.Viewer().createASCII(logfile)
         vwr.pushFormat(PETSc.Viewer().Format().ASCII_INFO_DETAIL)
         PETSc.Log().view(vwr)
-        PETSc.Log().view()
 
         # Read performance results and register results
         petsclog = {}
@@ -58,10 +58,10 @@ class EigenmodeExecutor(Executor):
             for event, eventlog in stagelog.items():
                 time = max([eventlog[p]['time'] for p in range(petsclog['numProcs'])])
                 if time > 0.0:
-                    self.register('%s:%s' % (stage, event), time, measure='time')
+                    self.register(time, event='%s:%s' % (stage, event), measure='time')
                 flops = sum([eventlog[p]['flops'] for p in range(petsclog['numProcs'])])
                 if flops > 0.0:
-                    self.register('%s:%s' % (stage, event), flops, measure='flops')
+                    self.register(flops, event='%s:%s' % (stage, event), measure='flops')
 
         # Store meta data
         self.meta['dofs'] = MPI.COMM_WORLD.allreduce(self.eigen.elastic.S.dof_count, op=MPI.SUM)
@@ -83,60 +83,96 @@ class EigenmodeExecutor(Executor):
 if __name__ == '__main__':
     from opescibench import Benchmark
     op2.init(log_level='ERROR')
+    description = ("Benchmarking script for Eigenmode example - modes:\n" +
+                   "\tbench: Run benchmark with given parameters\n" +
+                   "\tplot: Plot results from the benchmark\n")
+    parser = ArgumentParser(description=description,
+                            formatter_class=RawDescriptionHelpFormatter)
+    # subparsers = parser.add_subparsers(dest='mode', help="Mode of operation")
+    # parser_bench = subparsers.add_parser('bench', help='Perform benchmarking runs on target machine')
+    # parser_plot = subparsers.add_parser('plot', help='Plot diagrams from stored results')
 
-    bench = Benchmark(name='EigenmodeBench')
-    bench.add_parameter('--dim', type=int, default=2, help='Problem dimension')
-    bench.add_parameter('--nprocs', type=int, nargs='+', default=[op2.MPI.comm.size] or [1],
-                        help='Number of parallel processes')
-    bench.add_parameter('--size', type=int, nargs='+', default=[8],
-                        help='Mesh size (number of edges per dimension)')
-    bench.add_parameter('--time', type=float, nargs=1, default=5.0,
-                        help='Total runtime in seconds')
-    bench.add_parameter('--dt', type=float, nargs=1, default=-1.,
-                        help='Timestep size in seconds; auto-derived if dt < 0.')
-    bench.add_parameter('--degree', type=int, nargs='+', default=[1],
-                        help='Degree of spatial discretisation')
-    bench.add_parameter('--solver', choices=('implicit', 'explicit'), nargs='+', default='explicit',
-                        help='Coffee optimisation level; default -O3')
-    bench.add_parameter('--opt', type=int, nargs='+', default=[3],
-                        help='Coffee optimisation level; default -O3')
+    parser.add_argument(dest="mode", nargs="?", default="bench",
+                        choices=["bench", "plot"], help="Execution mode")
+    parser.add_argument('-i', '--resultsdir', default='results',
+                        help='Directory containing results')
+
+    simulation = parser.add_argument_group("Simulation")
+    simulation.add_argument('--dim', type=int, default=2, help='Problem dimension')
+    simulation.add_argument('--size', type=int, nargs='+', default=[8],
+                            help='Mesh size (number of edges per dimension)')
+    simulation.add_argument('--time', type=float, nargs=1, default=5.0,
+                            help='Total runtime in seconds')
+    simulation.add_argument('--dt', type=float, nargs=1, default=-1.,
+                            help='Timestep size in seconds; auto-derived if dt < 0.')
+    simulation.add_argument('--degree', type=int, nargs='+', default=[1],
+                            help='Degree of spatial discretisation')
+    simulation.add_argument('--nprocs', type=int, nargs='+', default=[MPI.COMM_WORLD.size] or [1],
+                            help='Number of parallel processes')
+    simulation.add_argument('--solver', choices=('implicit', 'explicit'), nargs='+', default='explicit',
+                            help='Coffee optimisation level; default -O3')
+    simulation.add_argument('--opt', type=int, nargs='+', default=[3],
+                            help='Coffee optimisation level; default -O3')
+
     # Additional arguments for plotting
-    bench.plotter.parser.add_argument('--kernel', type=str, nargs='+', default=['uh1'],
-                                      help='Name of kernels for roofline plots')
-    bench.parse_args()
+    plotting = parser.add_argument_group("Plotting")
+    plotting.add_argument('--plottype', default='error',
+                          choices=('error', 'strong', 'roofline'),
+                          help='Type of plot to generate: error-cost or roofline')
+    plotting.add_argument('-o', '--plotdir', default='plots',
+                          help='Directory to store generated plots')
+    plotting.add_argument('--max-bw', metavar='max_bw', type=float,
+                          help='Maximum memory bandwidth for roofline plots')
+    plotting.add_argument('--max-flops', metavar='max_flops', type=float,
+                          help='Maximum flop rate for roofline plots')
+    plotting.add_argument('--kernel', type=str, nargs='+', default=['uh1'],
+                          help='Name of kernels for roofline plots')
 
-    if bench.args.mode == 'bench':
+    args = parser.parse_args()
+    params = vars(args).copy()
+    del params["mode"]
+    del params["plottype"]
+    del params["resultsdir"]
+    del params["plotdir"]
+    del params["max_bw"]
+    del params["max_flops"]
+    del params["kernel"]
+
+    bench = Benchmark(parameters=params, name='EigenmodeBench')
+
+    if args.mode == 'bench':
         # Run the model across the parameter sweep and save the result
         bench.execute(EigenmodeExecutor(), warmups=0, repeats=1)
         bench.save()
-    elif bench.args.mode == 'plot':
+    elif args.mode == 'plot':
+        plotter = Plotter(plotdir=args.plotdir)
         bench.load()
-        if bench.args.plottype == 'strong':
-            for field, solver in product(['velocity', 'stress'], bench.args.solver):
+        if args.plottype == 'strong':
+            for field, solver in product(['velocity', 'stress'], args.solver):
                 figname = 'SeigenStrong_%s_%s.pdf' % (field, solver)
                 time = bench.lookup(event='%s solve:summary' % field, measure='time')
                 events = ['%s:summary' % s for s in petsc_stages['%s solve' % field]]
                 if solver != 'implicit':
                     for ev in events:
                         time += bench.lookup(event=ev, measure='time')
-                bench.plotter.plot_strong_scaling(figname, bench.args.nprocs, time)
+                plotter.plot_strong_scaling(figname, args.nprocs, time)
                 figname = 'SeigenEfficiency_%s_%s.pdf' % (field, solver)
-                bench.plotter.plot_efficiency(figname, bench.args.nprocs, time)
+                plotter.plot_efficiency(figname, args.nprocs, time)
 
-        elif bench.args.plottype == 'error':
-            bench.plotter.figsize = (8.1, 5.2)
+        elif args.plottype == 'error':
+            plotter.figsize = (8.1, 5.2)
             for field in ['velocity', 'stress']:
                 figname = 'SeigenError_%s.pdf' % field
                 time = OrderedDict()
                 error = OrderedDict()
                 styles = OrderedDict()
                 events = ['%s:summary' % s for s in petsc_stages['%s solve' % field]]
-                for deg, solver in product(bench.args.degree, bench.args.solver):
+                for deg, solver in product(args.degree, args.solver):
                     label = u'P%d$_{DG}$ %s' % (deg, solver)
                     params = {'degree': deg, 'solver': solver}
                     styles[label] = '%s%s%s' % ('-' if solver == 'explicit' else ':',
-                                                bench.plotter.marker[deg-1],
-                                                bench.plotter.colour[deg-1])
+                                                plotter.marker[deg-1],
+                                                plotter.colour[deg-1])
                     # Annoyingly, nested stage:summary data is not accumulative,
                     # so we need to sum across the relevant forms ourselves
                     time[label] = bench.lookup(event='%s solve:summary' % field,
@@ -147,16 +183,16 @@ if __name__ == '__main__':
                                                         params=params)
                     error[label] = bench.lookup(event=None, measure='%s_error' % field,
                                                 params=params, category='meta')
-                bench.plotter.plot_error_cost(figname, error, time, styles,
-                                              xlabel='%s error in L2 norm' % field.capitalize())
+                plotter.plot_error_cost(figname, error, time, styles,
+                                        xlabel='%s error in L2 norm' % field.capitalize())
 
-        elif bench.args.plottype == 'roofline':
-            for kernel in bench.args.kernel:
+        elif args.plottype == 'roofline':
+            for kernel in args.kernel:
                 for pltype, plname in ploop_types.items():
                     figname = 'SeigenRoofline_%s_%s.pdf' % (kernel, pltype)
                     flops_s = {}
                     op_int = {}
-                    for deg, opt in product(bench.args.degree, bench.args.opt):
+                    for deg, opt in product(args.degree, args.opt):
                         params = {'degree': deg, 'opt': opt}
                         event = '%s:%s' % (kernel, plname)
                         label = u'P%d$_{DG}$: %s' % (deg, 'Raw' if opt == 0 else 'Opt')
@@ -169,7 +205,7 @@ if __name__ == '__main__':
                             flops_s[label] = (flops[0] / 1.e6 / time[0])
                             op_int[label] = profile[plname]['ai']
                     if len(flops_s) > 0:
-                        bench.plotter.plot_roofline(figname, flops_s, op_int)
+                        plotter.plot_roofline(figname, flops_s, op_int)
         else:
             raise NotImplementedErorr('Plot type %s not yet implemented' % plottype)
     else:
