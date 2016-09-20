@@ -8,6 +8,7 @@ from itertools import product
 from collections import OrderedDict
 from opescibench import Executor, Plotter
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
+import numpy as np
 
 parameters["pyop2_options"]["profiling"] = True
 parameters["coffee"]["O2"] = False
@@ -109,8 +110,8 @@ if __name__ == '__main__':
                             help='Degree of spatial discretisation')
     simulation.add_argument('--nprocs', type=int, nargs='+', default=[MPI.COMM_WORLD.size] or [1],
                             help='Number of parallel processes')
-    simulation.add_argument('--solver', choices=('implicit', 'explicit'), nargs='+', default='explicit',
-                            help='Coffee optimisation level; default -O3')
+    simulation.add_argument('--solver', choices=('implicit', 'explicit'), nargs='+',
+                            default=['explicit'], help='Solver method used')
     simulation.add_argument('--opt', type=int, nargs='+', default=[3],
                             help='Coffee optimisation level; default -O3')
 
@@ -150,11 +151,12 @@ if __name__ == '__main__':
         if args.plottype == 'strong':
             for field, solver in product(['velocity', 'stress'], args.solver):
                 figname = 'SeigenStrong_%s_%s.pdf' % (field, solver)
-                time = bench.lookup(event='%s solve:summary' % field, measure='time')
+                time = np.array(bench.lookup(event='%s solve:summary' % field,
+                                             measure='time').values())
                 events = ['%s:summary' % s for s in petsc_stages['%s solve' % field]]
                 if solver != 'implicit':
                     for ev in events:
-                        time += bench.lookup(event=ev, measure='time')
+                        time += np.array(bench.lookup(event=ev, measure='time').values())
                 plotter.plot_strong_scaling(figname, args.nprocs, time)
                 figname = 'SeigenEfficiency_%s_%s.pdf' % (field, solver)
                 plotter.plot_efficiency(figname, args.nprocs, time)
@@ -175,15 +177,15 @@ if __name__ == '__main__':
                                                 plotter.colour[deg-1])
                     # Annoyingly, nested stage:summary data is not accumulative,
                     # so we need to sum across the relevant forms ourselves
-                    time[label] = bench.lookup(event='%s solve:summary' % field,
-                                               measure='time', params=params)
+                    time[label] = np.array(bench.lookup(event='%s solve:summary' % field,
+                                                        measure='time', params=params).values())
                     if solver != 'implicit':
                         for ev in events:
-                            time[label] += bench.lookup(event=ev, measure='time',
-                                                        params=params)
-                    error[label] = bench.lookup(event=None, measure='%s_error' % field,
-                                                params=params, category='meta')
-                plotter.plot_error_cost(figname, error, time, styles,
+                            time[label] += np.array(bench.lookup(event=ev, measure='time',
+                                                                 params=params).values())
+                    error[label] = np.array(bench.lookup(event=None, measure='%s_error' % field,
+                                                         params=params, category='meta').values())
+                plotter.plot_error_cost(figname, error, time,
                                         xlabel='%s error in L2 norm' % field.capitalize())
 
         elif args.plottype == 'roofline':
