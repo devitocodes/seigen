@@ -1,7 +1,7 @@
 from eigenmode_2d import Eigenmode2DLF4
 from eigenmode_3d import Eigenmode3DLF4
 from firedrake import *
-import mpi4py
+from pyop2.mpi import MPI
 from firedrake.petsc import PETSc
 from os import path, getcwd
 from itertools import product
@@ -64,7 +64,7 @@ class EigenmodeExecutor(Executor):
                     self.register('%s:%s' % (stage, event), flops, measure='flops')
 
         # Store meta data
-        self.meta['dofs'] = op2.MPI.comm.allreduce(self.eigen.elastic.S.dof_count, op=mpi4py.MPI.SUM)
+        self.meta['dofs'] = MPI.COMM_WORLD.allreduce(self.eigen.elastic.S.dof_count, op=MPI.SUM)
         self.meta['spacing'] = 1. / size
         self.meta['kernel_profile'] = parameters['seigen']['profiling']
 

@@ -1,5 +1,5 @@
 from math import *
-from pyop2 import op2
+from pyop2.mpi import MPI
 
 
 def log(s):
@@ -7,7 +7,7 @@ def log(s):
 
     :arg str s: The message to print.
     """
-    if op2.MPI.comm.rank == 0:
+    if MPI.COMM_WORLD.rank == 0:
         print s
 
 

@@ -3,6 +3,7 @@
 from pyop2 import *
 from pyop2.profiling import timed_region
 from pyop2.base import _trace
+from pyop2.mpi import MPI
 from firedrake import *
 from firedrake.petsc import PETSc
 from elastic_wave.helpers import log
@@ -82,7 +83,7 @@ class ElasticLF4(object):
             self.U = VectorFunctionSpace(mesh, family, degree, name='U')
 
             # Assumes that the S and U function spaces are the same.
-            dofs = op2.MPI.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
+            dofs = MPI.COMM_WORLD.allreduce(self.S.dof_count, op=MPI.SUM)
             log("Number of degrees of freedom: %d" % dofs)
 
             self.s = TrialFunction(self.S)
