@@ -53,21 +53,25 @@ class EigenmodeExecutor(Executor):
         PETSc.Log().view(vwr)
 
         # Read performance results and register results
-        petsclog = {}
-        execfile(logfile, globals(), petsclog)
-        for stage, stagelog in petsclog['Stages'].items():
-            for event, eventlog in stagelog.items():
-                time = max([eventlog[p]['time'] for p in range(petsclog['numProcs'])])
-                if time > 0.0:
-                    self.register(time, event='%s:%s' % (stage, event), measure='time')
-                flops = sum([eventlog[p]['flops'] for p in range(petsclog['numProcs'])])
-                if flops > 0.0:
-                    self.register(flops, event='%s:%s' % (stage, event), measure='flops')
+        if MPI.COMM_WORLD.rank == 0:
+            petsclog = {}
+            execfile(logfile, globals(), petsclog)
+            for stage, stagelog in petsclog['Stages'].items():
+                for event, eventlog in stagelog.items():
+                    print "eventlog keys", eventlog.keys()
+                    time = max([eventlog[p]['time'] for p in range(petsclog['numProcs'])])
+                    if time > 0.0:
+                        self.register(time, event='%s:%s' % (stage, event), measure='time')
+                    flops = sum([eventlog[p]['flops'] for p in range(petsclog['numProcs'])])
+                    if flops > 0.0:
+                        self.register(flops, event='%s:%s' % (stage, event), measure='flops')
 
         # Store meta data
-        self.meta['dofs'] = MPI.COMM_WORLD.allreduce(self.eigen.elastic.S.dof_count, op=MPI.SUM)
-        self.meta['spacing'] = 1. / size
-        self.meta['kernel_profile'] = parameters['seigen']['profiling']
+        num_dofs = MPI.COMM_WORLD.allreduce(self.eigen.elastic.S.dof_count, op=MPI.SUM)
+        if MPI.COMM_WORLD.rank == 0:
+            self.meta['dofs'] = num_dofs
+            self.meta['spacing'] = 1. / size
+            self.meta['kernel_profile'] = parameters['seigen']['profiling']
 
     def postprocess(self, **kwargs):
         """ Error estimates are compute intensive, so only run them once. """
