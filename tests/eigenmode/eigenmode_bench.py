@@ -143,11 +143,12 @@ if __name__ == '__main__':
     del params["max_flops"]
     del params["kernel"]
 
-    bench = Benchmark(parameters=params, name='EigenmodeBench')
+    bench = Benchmark(parameters=params, resultsdir=args.resultsdir,
+                      name='EigenmodeBench')
 
     if args.mode == 'bench':
         # Run the model across the parameter sweep and save the result
-        bench.execute(EigenmodeExecutor(), warmups=0, repeats=1)
+        bench.execute(EigenmodeExecutor(), warmups=1, repeats=3)
         bench.save()
     elif args.mode == 'plot':
         plotter = Plotter(plotdir=args.plotdir)
