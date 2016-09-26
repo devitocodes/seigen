@@ -5,11 +5,11 @@ if [ "$node" == "erebus" ]; then
     declare -a snmesh=(1.2 1.4)
     nodeid=0
 elif [ "$node" == "cx1-ivy" ]; then
-    declare -a cache=(0.6 0.45 0.3 0.225 0.15 0.115)
+    declare -a cache=(0.6 0.5 0.4 0.3 0.2 0.1)
     declare -a snmesh=(0.6 0.8)
     nodeid=1
 elif [ "$node" == "cx1-haswell" ]; then
-    declare -a cache=(0.6 0.45 0.3 0.225 0.15 0.115)
+    declare -a cache=(0.6 0.5 0.4 0.3)
     declare -a snmesh=(0.6 0.8)
     nodeid=2
 else
