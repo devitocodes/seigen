@@ -34,7 +34,7 @@ declare -a ts_p4=(20 45 70)
 declare -a partitionings=("chunk")
 
 # Meshe
-declare -a meshes=("--mesh-size (300.0,150.0) --mesh-spacing $h")
+declare -a meshes=("--mesh-size (300.0,150.0) --mesh-spacing $h" "--mesh-file /work/fl1612/meshes/wave_elastic/domain$h.msh --mesh-spacing $h")
 
 # The polynomial orders tested
 if [ -z "$poly" ]; then
