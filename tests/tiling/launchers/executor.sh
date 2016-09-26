@@ -17,7 +17,7 @@ export OMP_NUM_THREADS=1
 export SLOPE_BACKEND=SEQUENTIAL
 
 # The execution modes
-declare -a em_all=(1 2 3)
+declare -a em_all=(2 3)
 
 # Extra options for each mode
 declare -a opts_em1=("--glb-maps")
