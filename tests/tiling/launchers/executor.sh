@@ -6,7 +6,7 @@ cd $SEIGEN_DIR
 
 mkdir -p output
 
-OPTS="-log_view --output 10000"
+OPTS="-log_view --output 10000 --coffee-opt O3"
 TILE_OPTS="--fusion-mode only_tile --coloring default"
 LOG=""
 
