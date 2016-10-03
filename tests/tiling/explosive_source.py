@@ -301,7 +301,7 @@ class ElasticLF4(object):
             g += inner(v, source)*dx
         return g
 
-    def ast_matmul(self, F_a):
+    def ast_matmul(self, F_a, implementation='optimized'):
         """Generate an AST for a PyOP2 kernel performing a matrix-vector multiplication."""
 
         # The number of dofs on each element is /ndofs*cdim/
@@ -311,23 +311,44 @@ class ElasticLF4(object):
         cdim = F_a_fs.dim
         name = 'mat_vec_mul_kernel_%s' % F_a_fs.name
 
-        identifier = (ndofs, cdim, name)
+        identifier = (ndofs, cdim, name, implementation)
         if identifier in self.asts:
             return self.asts[identifier]
 
+        from coffee.system import isa
+        if cdim and cdim % isa['dp_reg'] == 0:
+            simd_pragma = '#pragma simd reduction(+:sum)'
+        else:
+            simd_pragma = ''
+
         # Craft the AST
-        body = ast.Incr(ast.Symbol('C', ('i/%d' % cdim, 'index')),
-                        ast.Prod(ast.Symbol('A', ('i',), ((ndofs*cdim, 'j*%d + k' % cdim),)),
-                                 ast.Symbol('B', ('j', 'k'))))
-        body = ast.c_for('k', cdim, body).children[0]
-        body = [ast.Decl('const int', ast.Symbol('index'), init=ast.Symbol('i%%%d' % cdim)),
-                ast.Assign(ast.Symbol('C', ('i/%d' % cdim, 'index' % cdim)), '0.0'),
-                ast.c_for('j', ndofs, body).children[0]]
-        body = ast.Block([ast.c_for('i', ndofs*cdim, body).children[0]])
-        funargs = [ast.Decl('double* restrict', 'A'),
-                   ast.Decl('double *restrict *restrict', 'B'),
-                   ast.Decl('double *restrict *', 'C')]
-        fundecl = ast.FunDecl('void', name, funargs, body, ['static', 'inline'])
+        if implementation == 'optimized':
+            body = ast.Incr(ast.Symbol('sum'),
+                            ast.Prod(ast.Symbol('A', ('i',), ((ndofs*cdim, 'j*%d + k' % cdim),)),
+                                     ast.Symbol('B', ('j', 'k'))))
+            body = ast.c_for('k', cdim, body, simd_pragma).children[0]
+            body = [ast.Decl('const int', ast.Symbol('index'), init=ast.Symbol('i%%%d' % cdim)),
+                    ast.Decl('double', ast.Symbol('sum'), init=ast.Symbol('0.0')),
+                    ast.c_for('j', ndofs, body).children[0],
+                    ast.Assign(ast.Symbol('C', ('i/%d' % cdim, 'index')), 'sum')]
+            body = ast.Block([ast.c_for('i', ndofs*cdim, body).children[0]])
+            funargs = [ast.Decl('double* restrict', 'A'),
+                       ast.Decl('double *restrict *restrict', 'B'),
+                       ast.Decl('double *restrict *', 'C')]
+            fundecl = ast.FunDecl('void', name, funargs, body, ['static', 'inline'])
+        else:
+            body = ast.Incr(ast.Symbol('C', ('i/%d' % cdim, 'index')),
+                            ast.Prod(ast.Symbol('A', ('i',), ((ndofs*cdim, 'j*%d + k' % cdim),)),
+                                     ast.Symbol('B', ('j', 'k'))))
+            body = ast.c_for('k', cdim, body).children[0]
+            body = [ast.Decl('const int', ast.Symbol('index'), init=ast.Symbol('i%%%d' % cdim)),
+                    ast.Assign(ast.Symbol('C', ('i/%d' % cdim, 'index' % cdim)), '0.0'),
+                    ast.c_for('j', ndofs, body).children[0]]
+            body = ast.Block([ast.c_for('i', ndofs*cdim, body).children[0]])
+            funargs = [ast.Decl('double* restrict', 'A'),
+                       ast.Decl('double *restrict *restrict', 'B'),
+                       ast.Decl('double *restrict *', 'C')]
+            fundecl = ast.FunDecl('void', name, funargs, body, ['static', 'inline'])
 
         # Track the AST for later fast retrieval
         self.asts[identifier] = fundecl
