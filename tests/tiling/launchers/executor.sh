@@ -8,7 +8,10 @@ mkdir -p output
 
 OPTS="-log_view --output 10000 --coffee-opt O3"
 TILE_OPTS="--fusion-mode only_tile --coloring default"
+
 LOG=""
+
+MESHES=$WORK/meshes/wave_elastic
 
 TSFC_CACHE=$HOME/firedrake-cache/tsfc-cache
 PYOP2_CACHE=$HOME/firedrake-cache/pyop2-cache
@@ -33,8 +36,8 @@ declare -a ts_p4=(20 45 70)
 # Partition modes for each poly order
 declare -a partitionings=("chunk")
 
-# Meshe
-declare -a meshes=("--mesh-size (300.0,150.0) --mesh-spacing $h" "--mesh-file /work/fl1612/meshes/wave_elastic/domain$h.msh --mesh-spacing $h")
+# Meshes
+declare -a meshes=("--mesh-file $MESHES/domain$h.msh --mesh-spacing $h")
 
 # The polynomial orders tested
 if [ -z "$poly" ]; then

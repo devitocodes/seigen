@@ -5,11 +5,11 @@ if [ "$node" == "erebus" ]; then
     declare -a snmesh=(1.2 1.4)
     nodeid=0
 elif [ "$node" == "cx1-ivy" ]; then
-    declare -a cache=(0.6 0.5 0.4 0.3 0.2 0.1)
+    declare -a cache=(0.8 0.6 0.5 0.4 0.3 0.2)
     declare -a snmesh=(0.6 0.8)
     nodeid=1
 elif [ "$node" == "cx1-haswell" ]; then
-    declare -a cache=(0.6 0.5 0.4 0.3)
+    declare -a cache=(0.8 0.6 0.5 0.4)
     declare -a snmesh=(0.6 0.8)
     nodeid=2
 else
@@ -48,17 +48,17 @@ elif [ "$mode" == "multinode" ]; then
     echo "Executing the test suite on a cluster of $node nodes"
     for poly in 1 2 3 4; do
         if [ "$node" == "cx1-ivy" ]; then
-            qsub -v poly=$poly,h=0.6,nodename=$nodeid -l walltime=72:00:00 -l select=1:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
-            qsub -v poly=$poly,h=0.45,nodename=$nodeid -l walltime=72:00:00 -l select=2:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
-            qsub -v poly=$poly,h=0.3,nodename=$nodeid -l walltime=72:00:00 -l select=4:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
-            qsub -v poly=$poly,h=0.225,nodename=$nodeid -l walltime=72:00:00 -l select=8:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
-            qsub -v poly=$poly,h=0.15,nodename=$nodeid -l walltime=72:00:00 -l select=16:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
-            qsub -v poly=$poly,h=0.115,nodename=$nodeid -l walltime=72:00:00 -l select=32:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
+            qsub -v poly=$poly,h=0.8,nodename=$nodeid -l walltime=72:00:00 -l select=1:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
+            qsub -v poly=$poly,h=0.6,nodename=$nodeid -l walltime=72:00:00 -l select=2:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
+            qsub -v poly=$poly,h=0.5,nodename=$nodeid -l walltime=72:00:00 -l select=4:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
+            qsub -v poly=$poly,h=0.4,nodename=$nodeid -l walltime=72:00:00 -l select=8:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
+            qsub -v poly=$poly,h=0.3,nodename=$nodeid -l walltime=72:00:00 -l select=16:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
+            qsub -v poly=$poly,h=0.2,nodename=$nodeid -l walltime=72:00:00 -l select=32:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
         elif [ "$node" == "cx1-haswell" ]; then
-            qsub -v poly=$poly,h=0.6,nodename=$nodeid -l walltime=72:00:00 -l select=1:ncpus=20:mem=48gb:icib=true -q pqcdt launchers/executor.sh
-            qsub -v poly=$poly,h=0.45,nodename=$nodeid -l walltime=72:00:00 -l select=2:ncpus=20:mem=48gb:icib=true -q pqcdt launchers/executor.sh
-            qsub -v poly=$poly,h=0.3,nodename=$nodeid -l walltime=72:00:00 -l select=4:ncpus=20:mem=48gb:icib=true -q pqcdt launchers/executor.sh
-            qsub -v poly=$poly,h=0.225,nodename=$nodeid -l walltime=72:00:00 -l select=8:ncpus=20:mem=48gb:icib=true -q pqcdt launchers/executor.sh
+            qsub -v poly=$poly,h=0.8,nodename=$nodeid -l walltime=72:00:00 -l select=1:ncpus=20:mem=48gb:icib=true -q pqcdt launchers/executor.sh
+            qsub -v poly=$poly,h=0.6,nodename=$nodeid -l walltime=72:00:00 -l select=2:ncpus=20:mem=48gb:icib=true -q pqcdt launchers/executor.sh
+            qsub -v poly=$poly,h=0.5,nodename=$nodeid -l walltime=72:00:00 -l select=4:ncpus=20:mem=48gb:icib=true -q pqcdt launchers/executor.sh
+            qsub -v poly=$poly,h=0.4,nodename=$nodeid -l walltime=72:00:00 -l select=8:ncpus=20:mem=48gb:icib=true -q pqcdt launchers/executor.sh
         else
             echo "Cannot run multi-node experiments on $node"
             exit
