@@ -9,8 +9,10 @@ mkdir -p output
 export OMP_NUM_THREADS=1
 export SLOPE_BACKEND=SEQUENTIAL
 
-OPTS="--output 10000 --time-max 0.05 --no-tofile"
+OPTS="--output 10000 --time-max 0.05 --no-tofile --coffee-opt O3"
 TILE_OPTS="--fusion-mode only_tile --coloring default"
+
+MESHES=$WORK/meshes/wave_elastic
 
 LOGGER=$TMPDIR"/logger_"$nodename"_cache_populator.txt"
 rm -f $LOGGER
@@ -50,9 +52,9 @@ declare -a mesh_p2=("--mesh-size (30.0,15.0) --mesh-spacing $h")
 declare -a mesh_p3=("--mesh-size (30.0,15.0) --mesh-spacing $h")
 declare -a mesh_p4=("--mesh-size (30.0,15.0) --mesh-spacing $h")
 
-declare -a mesh_default=("--mesh-size (300.0,150.0) --mesh-spacing 1.0")
+declare -a mesh_default=("--mesh-file $MESHES/domain1.0.msh --mesh-spacing 1.0")
 
-declare -a em_all=(1 2 3)
+declare -a em_all=(2 3)
 
 # Populate the local cache
 for poly in ${polys[@]}
