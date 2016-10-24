@@ -287,8 +287,11 @@ class ElasticLF4(object):
 
         with timed_region('timestepping'):
             t = self.dt
+            t_count = 0.
             while t <= T + 1e-12:
-                log("t = %f" % t)
+                if t >= t_count:
+                    log("t = %f" % t)
+                    t_count += 1.
 
                 with self.loop_context():
                     # In case the source is time-dependent, update the time 't' here.
