@@ -58,7 +58,6 @@ class EigenmodeExecutor(Executor):
             execfile(logfile, globals(), petsclog)
             for stage, stagelog in petsclog['Stages'].items():
                 for event, eventlog in stagelog.items():
-                    print "eventlog keys", eventlog.keys()
                     time = max([eventlog[p]['time'] for p in range(petsclog['numProcs'])])
                     if time > 0.0:
                         self.register(time, event='%s:%s' % (stage, event), measure='time')
