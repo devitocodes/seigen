@@ -152,6 +152,10 @@ if __name__ == '__main__':
     elif args.mode == 'plot':
         plotter = Plotter(plotdir=args.plotdir)
         bench.load()
+        if not bench.loaded:
+            warning("Could not load any results, nothing to plot. Exiting...")
+            sys.exit(0)
+
         if args.plottype == 'strong':
             for field, solver in product(['velocity', 'stress'], args.solver):
                 figname = 'SeigenStrong_%s_%s.pdf' % (field, solver)
