@@ -6,7 +6,7 @@ from firedrake.petsc import PETSc
 from os import path, getcwd
 from itertools import product
 from collections import OrderedDict
-from opescibench import Executor, Plotter
+from opescibench import Executor, Plotter, BarchartPlotter
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 import numpy as np
 
@@ -121,7 +121,7 @@ if __name__ == '__main__':
     # Additional arguments for plotting
     plotting = parser.add_argument_group("Plotting")
     plotting.add_argument('--plottype', default='error',
-                          choices=('error', 'strong', 'roofline'),
+                          choices=('error', 'strong', 'roofline', 'compare'),
                           help='Type of plot to generate: error-cost or roofline')
     plotting.add_argument('-o', '--plotdir', default='plots',
                           help='Directory to store generated plots')
@@ -155,6 +155,8 @@ if __name__ == '__main__':
         if not bench.loaded:
             warning("Could not load any results, nothing to plot. Exiting...")
             sys.exit(0)
+
+        events = ['velocity solve:summary', 'stress solve:summary']
 
         if args.plottype == 'strong':
             for field, solver in product(['velocity', 'stress'], args.solver):
@@ -216,6 +218,19 @@ if __name__ == '__main__':
                             op_int[label] = profile[plname]['ai']
                     if len(flops_s) > 0:
                         plotter.plot_roofline(figname, flops_s, op_int)
+
+        elif args.plottype == 'compare':
+            # Barchart comparison of optimised vs. unoptimised runs on
+            # different discretisations
+            figname = 'SeigenCompare.pdf'
+            with BarchartPlotter(figname=figname, plotdir=args.plotdir) as plot:
+                for key, time in bench.lookup(params=params, event=events,
+                                              measure='time').items():
+                    param = dict(key)
+                    print "params", param, time, param['degree']
+                    plot.add_value(sum(time), grouplabel='DG-P%d' % param['degree'],
+                                   label='Raw' if param['opt'] <= 2 else 'Opt',
+                                   color='b' if param['opt'] <= 2 else 'r')
         else:
             raise NotImplementedErorr('Plot type %s not yet implemented' % plottype)
     else:
