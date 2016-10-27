@@ -6,7 +6,7 @@ from firedrake.petsc import PETSc
 from os import path, getcwd
 from itertools import product
 from collections import OrderedDict
-from opescibench import Executor, Plotter, BarchartPlotter
+from opescibench import Executor, Plotter, LinePlotter, BarchartPlotter
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 import numpy as np
 
@@ -166,17 +166,36 @@ if __name__ == '__main__':
         stages = field_stages[args.field]
 
         if args.plottype == 'strong':
-            for field, solver in product(['velocity', 'stress'], args.solver):
-                figname = 'SeigenStrong_%s_%s.pdf' % (field, solver)
-                time = np.array(bench.lookup(event='%s solve:summary' % field,
-                                             measure='time').values())
-                events = ['%s:summary' % s for s in petsc_stages['%s solve' % field]]
-                if solver != 'implicit':
-                    for ev in events:
-                        time += np.array(bench.lookup(event=ev, measure='time').values())
-                plotter.plot_strong_scaling(figname, args.nprocs, time)
-                figname = 'SeigenEfficiency_%s_%s.pdf' % (field, solver)
-                plotter.plot_efficiency(figname, args.nprocs, time)
+            figname = 'SeigenStrong_%s.pdf' % args.field
+            effname = 'SeigenEfficiency_%s.pdf' % args.field
+            events = ['%s:summary' % s for s in stages]
+            # Plot strong scalability
+            with LinePlotter(figname=figname, plotdir=args.plotdir,
+                             xlabel='Number of processors',
+                             ylabel='Wall time (s)') as scaling:
+                # Sweep over everything but 'nprocs'
+                for key in bench.sweep(keys={'nprocs': params['nprocs'][0]}):
+                    time = []
+                    for p in params['nprocs']:
+                        key['nprocs'] = p
+                        time += [sum(bench.lookup(params=key, measure='time',
+                                                  event=events).values()[0])]
+                    scaling.add_line(params['nprocs'], time)
+
+            # Plot parallel efficiency
+            with LinePlotter(figname=effname, plotdir=args.plotdir,
+                             xlabel='Number of processors',
+                             ylabel='Parallel efficiency',
+                             plot_type='semilogx', ytype=np.float32) as efficiency:
+                # Sweep over everything but 'nprocs'
+                for key in bench.sweep(keys={'nprocs': params['nprocs'][0]}):
+                    time = []
+                    for p in params['nprocs']:
+                        key['nprocs'] = p
+                        time += [sum(bench.lookup(params=key, measure='time',
+                                                  event=events).values()[0])]
+                    eff = [t / time[0] for t in time]
+                    efficiency.add_line(params['nprocs'], eff)
 
         elif args.plottype == 'error':
             plotter.figsize = (8.1, 5.2)
