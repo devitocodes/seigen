@@ -227,7 +227,6 @@ if __name__ == '__main__':
                 for key, time in bench.lookup(params=params, event=events,
                                               measure='time').items():
                     param = dict(key)
-                    print "params", param, time, param['degree']
                     plot.add_value(sum(time), grouplabel='DG-P%d' % param['degree'],
                                    label='Raw' if param['opt'] <= 2 else 'Opt',
                                    color='b' if param['opt'] <= 2 else 'r')
