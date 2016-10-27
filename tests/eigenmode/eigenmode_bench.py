@@ -198,31 +198,28 @@ if __name__ == '__main__':
                     efficiency.add_line(params['nprocs'], eff)
 
         elif args.plottype == 'error':
-            plotter.figsize = (8.1, 5.2)
-            for field in ['velocity', 'stress']:
-                figname = 'SeigenError_%s.pdf' % field
-                time = OrderedDict()
-                error = OrderedDict()
-                styles = OrderedDict()
-                events = ['%s:summary' % s for s in field_stages['%s solve' % field]]
-                for deg, solver in product(args.degree, args.solver):
-                    label = u'P%d$_{DG}$ %s' % (deg, solver)
-                    params = {'degree': deg, 'solver': solver}
-                    styles[label] = '%s%s%s' % ('-' if solver == 'explicit' else ':',
-                                                plotter.marker[deg-1],
-                                                plotter.colour[deg-1])
-                    # Annoyingly, nested stage:summary data is not accumulative,
-                    # so we need to sum across the relevant forms ourselves
-                    time[label] = np.array(bench.lookup(event='%s solve:summary' % field,
-                                                        measure='time', params=params).values())
-                    if solver != 'implicit':
-                        for ev in events:
-                            time[label] += np.array(bench.lookup(event=ev, measure='time',
-                                                                 params=params).values())
-                    error[label] = np.array(bench.lookup(event=None, measure='%s_error' % field,
-                                                         params=params, category='meta').values())
-                plotter.plot_error_cost(figname, error, time,
-                                        xlabel='%s error in L2 norm' % field.capitalize())
+            # Plot error-cost diagram
+            assert args.field in ['velocity', 'stress']
+            figname = 'SeigenError_%s.pdf' % args.field
+            events = ['%s:summary' % s for s in stages]
+            with LinePlotter(figname=figname, plotdir=args.plotdir,
+                             xlabel='Error in L2 norm',
+                             ylabel='Wall time (s)',
+                             xbase=10., xtype=np.float32,
+                             plot_type='loglog') as error_cost:
+                # Sweep over degrees
+                for d in params['degree']:
+                    time = []
+                    error = []
+                    for key in bench.sweep(keys={'degree': d}):
+                        ev_time = bench.lookup(params=key, measure='time',
+                                               event=events).values()
+                        err = bench.lookup(params=key, category='meta',
+                                           measure='%s_error' % args.field).values()
+                        if len(ev_time) > 0:
+                            time += [sum(ev_time[0])]
+                            error += err
+                    error_cost.add_line(error, time)
 
         elif args.plottype == 'roofline':
             for kernel in args.kernel:
