@@ -15,8 +15,11 @@ parameters["coffee"]["O2"] = False
 parameters["seigen"] = {}
 parameters["seigen"]["profiling"] = True
 
-petsc_stages = {'velocity solve': ['uh1', 'stemp', 'uh2', 'u1'],
-                'stress solve': ['sh1', 'utemp', 'sh2', 's1']}
+field_stages = {
+    'all': ['uh1', 'stemp', 'uh2', 'u1', 'sh1', 'utemp', 'sh2', 's1'],
+    'velocity': ['uh1', 'stemp', 'uh2', 'u1'],
+    'stress': ['sh1', 'utemp', 'sh2', 's1']
+}
 petsc_events = ['MatMult', 'ParLoopExecute']
 
 ploop_types = {'cell': 'form0_cell_integral_otherwise',
@@ -123,6 +126,9 @@ if __name__ == '__main__':
     plotting.add_argument('--plottype', default='error',
                           choices=('error', 'strong', 'roofline', 'compare'),
                           help='Type of plot to generate: error-cost or roofline')
+    plotting.add_argument('--field', default='all',
+                          choices=('all', 'velocity', 'stress'),
+                          help='Type of plot to generate: error-cost or roofline')
     plotting.add_argument('-o', '--plotdir', default='plots',
                           help='Directory to store generated plots')
     plotting.add_argument('--max-bw', metavar='max_bw', type=float,
@@ -141,6 +147,7 @@ if __name__ == '__main__':
     del params["max_bw"]
     del params["max_flops"]
     del params["kernel"]
+    del params["field"]
 
     bench = Benchmark(parameters=params, resultsdir=args.resultsdir,
                       name='EigenmodeBench')
@@ -156,7 +163,7 @@ if __name__ == '__main__':
             warning("Could not load any results, nothing to plot. Exiting...")
             sys.exit(0)
 
-        events = ['velocity solve:summary', 'stress solve:summary']
+        stages = field_stages[args.field]
 
         if args.plottype == 'strong':
             for field, solver in product(['velocity', 'stress'], args.solver):
@@ -178,7 +185,7 @@ if __name__ == '__main__':
                 time = OrderedDict()
                 error = OrderedDict()
                 styles = OrderedDict()
-                events = ['%s:summary' % s for s in petsc_stages['%s solve' % field]]
+                events = ['%s:summary' % s for s in field_stages['%s solve' % field]]
                 for deg, solver in product(args.degree, args.solver):
                     label = u'P%d$_{DG}$ %s' % (deg, solver)
                     params = {'degree': deg, 'solver': solver}
@@ -223,6 +230,7 @@ if __name__ == '__main__':
             # Barchart comparison of optimised vs. unoptimised runs on
             # different discretisations
             figname = 'SeigenCompare.pdf'
+            events = ['%s:summary' % s for s in stages]
             with BarchartPlotter(figname=figname, plotdir=args.plotdir) as plot:
                 for key, time in bench.lookup(params=params, event=events,
                                               measure='time').items():
