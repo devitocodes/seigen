@@ -77,6 +77,8 @@ class EigenmodeExecutor(Executor):
 
     def postprocess(self, **kwargs):
         """ Error estimates are compute intensive, so only run them once. """
+        if self.no_error:
+            return
         try:
             u_error, s_error = self.eigen.eigenmode_error(self.u1, self.s1)
             self.meta['velocity_error'] = u_error
@@ -120,6 +122,8 @@ if __name__ == '__main__':
                             default=['explicit'], help='Solver method used')
     simulation.add_argument('--opt', type=int, nargs='+', default=[3],
                             help='Coffee optimisation level; default -O3')
+    simulation.add_argument('--no_error', action='store_true', default=False,
+                            help='Suppress error computation')
 
     # Additional arguments for plotting
     plotting = parser.add_argument_group("Plotting")
@@ -148,13 +152,16 @@ if __name__ == '__main__':
     del params["max_flops"]
     del params["kernel"]
     del params["field"]
+    del params["no_error"]
 
     bench = Benchmark(parameters=params, resultsdir=args.resultsdir,
                       name='EigenmodeBench')
 
     if args.mode == 'bench':
         # Run the model across the parameter sweep and save the result
-        bench.execute(EigenmodeExecutor(), warmups=1, repeats=3)
+        executor = EigenmodeExecutor()
+        executor.no_error = args.no_error
+        bench.execute(executor, warmups=1, repeats=3)
         bench.save()
     elif args.mode == 'plot':
         plotter = Plotter(plotdir=args.plotdir)
