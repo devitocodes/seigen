@@ -30,8 +30,8 @@ declare -a opts_em3=("--glb-maps")
 # Tile sizes for each poly order
 declare -a ts_p1=(140 250 320 400)
 declare -a ts_p2=(70 140 200 300)
-declare -a ts_p3=(45 60 75)
-declare -a ts_p4=(20 45 70)
+declare -a ts_p3=(30 45 60 75)
+declare -a ts_p4=(10 20 30 40)
 
 # Partition modes for each poly order
 declare -a partitionings=("chunk")
