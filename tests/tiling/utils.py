@@ -73,6 +73,7 @@ def output_time(start, end, **kwargs):
     domain = kwargs.get('domain', 'default_domain')
     coloring = kwargs.get('coloring', 'default')
     prefetch = 'yes' if kwargs.get('prefetch', False) else 'no'
+    function_spaces = kwargs.get('function_spaces', [])
     backend = os.environ.get("SLOPE_BACKEND", "SEQUENTIAL")
 
     avg = lambda v: (sum(v) / len(v)) if v else 0.0
@@ -190,12 +191,13 @@ def output_time(start, end, **kwargs):
 
     if rank == 0 and verbose:
         for i in range(num_procs):
+            fs_info = ", ".join(["%s=%d" % (fs.name, fs.dof_count) for fs in function_spaces])
             tot_time = compute_times[i] + mpi_times[i]
             offC = (ends[i] - starts[i]) - tot_time
             offCperc = (offC / (ends[i] - starts[i]))*100
             mpiPerc = (mpi_times[i] / (ends[i] - starts[i]))*100
-            print "Rank %d: compute=%.2fs, mpi=%.2fs -- tot=%.2fs (py=%.2fs, %.2f%%; mpi_oh=%.2f%%)" % \
-                (i, compute_times[i], mpi_times[i], tot_time, offC, offCperc, mpiPerc)
+            print "Rank %d: comp=%.2fs, mpi=%.2fs -- tot=%.2fs (py=%.2fs, %.2f%%; mpi_oh=%.2f%%; fs=[%s])" % \
+                (i, compute_times[i], mpi_times[i], tot_time, offC, offCperc, mpiPerc, fs_info)
         sys.stdout.flush()
     MPI.COMM_WORLD.barrier()
 

@@ -603,7 +603,8 @@ class ExplosiveSourceLF4(object):
                     prefetch=tiling['use_prefetch'],
                     coloring=tiling['coloring'],
                     poly_order=poly_order,
-                    domain=os.path.splitext(os.path.basename(mesh.name))[0])
+                    domain=os.path.splitext(os.path.basename(mesh.name))[0],
+                    function_spaces=[self.elastic.S, self.elastic.U])
 
         return u1, s1
 
