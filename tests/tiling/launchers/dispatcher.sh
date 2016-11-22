@@ -1,8 +1,8 @@
 #!/bin/bash
 
 if [ "$node" == "erebus" ]; then
-    declare -a cache=(1.2 1.4)
-    declare -a snmesh=(1.2 1.4)
+    declare -a cache=(1.4 1.2)
+    declare -a snmesh=(1.4 1.2)
     nodeid=0
 elif [ "$node" == "cx1-ivy" ]; then
     declare -a cache=(1.0 0.8 0.6 0.4 0.2 0.1)
@@ -12,6 +12,35 @@ elif [ "$node" == "cx1-haswell" ]; then
     declare -a cache=(1.0 0.8 0.6 0.4)
     declare -a snmesh=(1.0 0.8 0.6)
     nodeid=2
+elif [ "$node" == "cx2-westmere" ]; then
+    if [ "$mode" == "multinode" ]; then
+        echo "Illegal combination node=$node and mode=$mode"
+        exit
+    fi
+    declare -a cache=(1.0 0.8 0.6 0.4 0.2 0.1)
+    declare -a snmesh=(1.0)
+    nodeid=3
+elif [ "$node" == "cx2-sandyb" ]; then
+    if [ "$mode" == "singlenode" ]; then
+        echo "Illegal combination node=$node and mode=$mode"
+        exit
+    fi
+    declare -a cache=(1.0 0.8 0.6 0.4)
+    nodeid=4
+elif [ "$node" == "cx2-haswell" ]; then
+    if [ "$mode" == "singlenode" ]; then
+        echo "Illegal combination node=$node and mode=$mode"
+        exit
+    fi
+    declare -a cache=(1.0 0.8 0.6 0.4)
+    nodeid=5
+elif [ "$node" == "cx2-broadwell" ]; then
+    if [ "$mode" == "singlenode" ]; then
+        echo "Illegal combination node=$node and mode=$mode"
+        exit
+    fi
+    declare -a cache=(1.0 0.8 0.6 0.4)
+    nodeid=6
 else
     echo "Unrecognized node: $node"
     exit
@@ -27,6 +56,8 @@ if [ "$mode" == "populator" ]; then
                 qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=20:mem=60gb:ivyb=true launchers/cache_populator.sh
             elif [ "$node" == "cx1-haswell" ]; then
                 qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=20:mem=60gb -q pqcdt launchers/cache_populator.sh
+            elif [ "$node" == "cx2-westmere" ]; then
+                qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=12:mpiprocs=12 launchers/cache_populator.sh
             fi
         done
     done
@@ -41,6 +72,8 @@ elif [ "$mode" == 'singlenode' ]; then
                 qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=20:mem=32gb:ivyb=true launchers/executor.sh
             elif [ "$node" == "cx1-haswell" ]; then
                 qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=20:mem=32gb:icib=true -q pqcdt launchers/executor.sh
+            elif [ "$node" == "cx2-westmere" ]; then
+                qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=12:mpiprocs=12 launchers/executor.sh
             fi
         done
     done
@@ -52,13 +85,20 @@ elif [ "$mode" == "multinode" ]; then
             qsub -v poly=$poly,h=0.8,nodename=$nodeid -l walltime=72:00:00 -l select=2:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
             qsub -v poly=$poly,h=0.6,nodename=$nodeid -l walltime=72:00:00 -l select=4:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
             qsub -v poly=$poly,h=0.4,nodename=$nodeid -l walltime=72:00:00 -l select=8:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
-            qsub -v poly=$poly,h=0.2,nodename=$nodeid -l walltime=72:00:00 -l select=16:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
-            qsub -v poly=$poly,h=0.1,nodename=$nodeid -l walltime=72:00:00 -l select=32:ncpus=20:mem=48gb:ivyb=true launchers/executor.sh
         elif [ "$node" == "cx1-haswell" ]; then
             qsub -v poly=$poly,h=1.0,nodename=$nodeid -l walltime=72:00:00 -l select=1:ncpus=20:mem=48gb:icib=true -q pqcdt launchers/executor.sh
             qsub -v poly=$poly,h=0.8,nodename=$nodeid -l walltime=72:00:00 -l select=2:ncpus=20:mem=48gb:icib=true -q pqcdt launchers/executor.sh
             qsub -v poly=$poly,h=0.6,nodename=$nodeid -l walltime=72:00:00 -l select=4:ncpus=20:mem=48gb:icib=true -q pqcdt launchers/executor.sh
             qsub -v poly=$poly,h=0.4,nodename=$nodeid -l walltime=72:00:00 -l select=8:ncpus=20:mem=48gb:icib=true -q pqcdt launchers/executor.sh
+        elif [ "$node" == "cx2-sandyb" ]; then
+            echo "node=$node and mode=$mode not available yet"
+            exit
+        elif [ "$node" == "cx2-haswell" ]; then
+            echo "node=$node and mode=$mode not available yet"
+            exit
+        elif [ "$node" == "cx2-broadwell" ]; then
+            echo "node=$node and mode=$mode not available yet"
+            exit
         else
             echo "Cannot run multi-node experiments on $node"
             exit

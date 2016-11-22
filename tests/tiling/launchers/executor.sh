@@ -57,6 +57,18 @@ elif [ "$nodename" -eq 1 ]; then
 elif [ "$nodename" -eq 2 ]; then
     nodename="cx1-haswell"
     MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+elif [ "$nodename" -eq 3 ]; then
+    nodename="cx2-westmere"
+    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+elif [ "$nodename" -eq 4 ]; then
+    nodename="cx2-sandyb"
+    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+elif [ "$nodename" -eq 5 ]; then
+    nodename="cx2-haswell"
+    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+elif [ "$nodename" -eq 6 ]; then
+    nodename="cx2-broadwell"
+    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
 else
     echo "Unrecognized nodename: $nodename"
     echo "Run as: nodename=integer h=float poly=integer launcher.sh"
