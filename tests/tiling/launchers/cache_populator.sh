@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cd $HOME/NewFiredrake
+cd $FIREDRAKE_MAIN_DIR
 source setenv.env
 cd $SEIGEN_DIR
 
@@ -21,19 +21,45 @@ touch $LOGGER
 export TSFC_CACHE=$TMPDIR/tsfc-cache
 export PYOP2_CACHE=$TMPDIR/pyop2-cache
 
-# Recognized systems: [Erebus (0), CX1-Ivy (1), CX1-Haswell (2)]
+# Recognized systems: [Erebus (0), CX1-Ivy (1), CX1-Haswell (2), CX2-Westmere (3), CX2-SandyBridge (4), CX2-Haswell (5), CX2-Broadwell (6)]
 if [ "$nodename" -eq 0 ]; then
     nodename="erebus-sandyb"
     MPICMD="mpirun -np 4 --bind-to-core -x FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE -x PYOP2_CACHE_DIR=$PYOP2_CACHE -x NODENAME=$nodename"
 elif [ "$nodename" -eq 1 ]; then
     nodename="cx1-ivyb"
     MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+    module load intel-suite/2016.3
+    module load mpi/intel-5.1.1.109
+    module load mpi4py/1.3.1
 elif [ "$nodename" -eq 2 ]; then
     nodename="cx1-haswell"
     MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+    module load intel-suite/2016.3
+    module load mpi/intel-5.1.1.109
+    module load mpi4py/1.3.1
+elif [ "$nodename" -eq 3 ]; then
+    nodename="cx2-westmere"
+    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+    module load gcc
+    module load mpi
+elif [ "$nodename" -eq 4 ]; then
+    nodename="cx2-sandyb"
+    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+    module load gcc
+    module load mpi
+elif [ "$nodename" -eq 5 ]; then
+    nodename="cx2-haswell"
+    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+    module load gcc
+    module load mpi
+elif [ "$nodename" -eq 6 ]; then
+    nodename="cx2-broadwell"
+    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+    module load gcc
+    module load mpi
 else
     echo "Unrecognized nodename: $nodename"
-    echo "Run as: nodename=integer h=float poly=integer launcher.sh"
+    echo "Run as: nodename=integer h=float poly=integer executor.sh"
     exit
 fi
 
@@ -92,7 +118,7 @@ done
 rm $LOGGER
 
 # Copy the local cache to the shared file system
-mkdir -p $HOME/firedrake-cache/pyop2-cache
-mkdir -p $HOME/firedrake-cache/tsfc-cache
-cp -n $PYOP2_CACHE/* $HOME/firedrake-cache/pyop2-cache
-cp -n $TSFC_CACHE/* $HOME/firedrake-cache/tsfc-cache
+mkdir -p $FIREDRAKE_MAIN_DIR/firedrake-cache/pyop2-cache
+mkdir -p $FIREDRAKE_MAIN_DIR/firedrake-cache/tsfc-cache
+cp -n $PYOP2_CACHE/* $FIREDRAKE_MAIN_DIR/firedrake-cache/pyop2-cache
+cp -n $TSFC_CACHE/* $FIREDRAKE_MAIN_DIR/firedrake-cache/tsfc-cache
