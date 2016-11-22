@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cd $HOME/NewFiredrake
+cd $FIREDRAKE_MAIN_DIR
 source setenv.env
 cd $SEIGEN_DIR
 
@@ -13,8 +13,8 @@ LOG=""
 
 MESHES=$WORK/meshes/wave_elastic
 
-TSFC_CACHE=$HOME/firedrake-cache/tsfc-cache
-PYOP2_CACHE=$HOME/firedrake-cache/pyop2-cache
+TSFC_CACHE=$FIREDRAKE_MAIN_DIR/firedrake-cache/tsfc-cache
+PYOP2_CACHE=$FIREDRAKE_MAIN_DIR/firedrake-cache/pyop2-cache
 
 export OMP_NUM_THREADS=1
 export SLOPE_BACKEND=SEQUENTIAL
