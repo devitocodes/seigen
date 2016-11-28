@@ -6,9 +6,17 @@ from firedrake.petsc import PETSc
 from os import path, getcwd
 from itertools import product
 from collections import OrderedDict
-from opescibench import Executor, Plotter, LinePlotter, BarchartPlotter
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 import numpy as np
+from opescibench import Executor
+
+try:
+    from opescibench import Plotter, LinePlotter, BarchartPlotter
+except:
+    Plotter = None
+    LinePlotter = None
+    BarchartPlotter = None
+
 
 parameters["pyop2_options"]["profiling"] = True
 parameters["coffee"]["O2"] = False
