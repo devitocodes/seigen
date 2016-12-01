@@ -11,7 +11,9 @@ TILE_OPTS="--fusion-mode only_tile --coloring default"
 
 LOG=""
 
-MESHES=$WORK/meshes/wave_elastic
+# Copy the mesh to a local TMP directory
+pbsdsh cp $WORK/meshes/wave_elastic/domain$h.msh $TMPDIR
+MESHES=$TMPDIR
 
 TSFC_CACHE=$FIREDRAKE_MAIN_DIR/firedrake-cache/tsfc-cache
 PYOP2_CACHE=$FIREDRAKE_MAIN_DIR/firedrake-cache/pyop2-cache
@@ -47,47 +49,73 @@ else
     declare -a polys=($poly)
 fi
 
+### System-specific setup - BEGIN ###
+
 # Recognized systems: [Erebus (0), CX1-Ivy (1), CX1-Haswell (2), CX2-Westmere (3), CX2-SandyBridge (4), CX2-Haswell (5), CX2-Broadwell (6)]
-if [ "$nodename" -eq 0 ]; then
-    nodename="erebus-sandyb"
+
+function erebus_setup {
     MPICMD="mpirun -np 4 --bind-to-core -x FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE -x PYOP2_CACHE_DIR=$PYOP2_CACHE -x NODENAME=$nodename"
+    export PYOP2_BACKEND_COMPILER=intel
+}
+
+function cx1_setup {
+    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+    export PYOP2_BACKEND_COMPILER=intel
+    module load intel-suite/2016.3
+    module load mpi/intel-5.1.1.109
+    module load mpi4py/1.3.1
+}
+
+function cx2_setup {
+    export FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE
+    export PYOP2_CACHE_DIR=$PYOP2_CACHE
+    MPICMD="mpiexec"
+    module load gcc
+    module load mpi
+    export PYOP2_BACKEND_COMPILER=gnu
+    export MPICC_CC=gcc
+    export MPICXX_CXX=g++
+    export MPIF08_F08=gfortran
+    export MPIF90_F90=gfortran
+    export PETSC_CONFIGURE_OPTIONS=--download-fblaslapack
+    export PATH=$HOME/.local/bin:$PATH
+}
+
+if [ "$nodename" -eq 0 ]; then
+    export nodename="erebus-sandyb"
+    export PYOP2_SIMD_ISA=avx
+    erebus_setup
 elif [ "$nodename" -eq 1 ]; then
-    nodename="cx1-ivyb"
-    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
-    module load intel-suite/2016.3
-    module load mpi/intel-5.1.1.109
-    module load mpi4py/1.3.1
+    export nodename="cx1-ivyb"
+    export PYOP2_SIMD_ISA=avx
+    cx1_setup
 elif [ "$nodename" -eq 2 ]; then
-    nodename="cx1-haswell"
-    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
-    module load intel-suite/2016.3
-    module load mpi/intel-5.1.1.109
-    module load mpi4py/1.3.1
+    export nodename="cx1-haswell"
+    export PYOP2_SIMD_ISA=avx
+    cx1_setup
 elif [ "$nodename" -eq 3 ]; then
-    nodename="cx2-westmere"
-    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
-    module load gcc
-    module load mpi
+    export nodename="cx2-westmere"
+    export PYOP2_SIMD_ISA=sse
+    cx2_setup
 elif [ "$nodename" -eq 4 ]; then
-    nodename="cx2-sandyb"
-    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
-    module load gcc
-    module load mpi
+    export nodename="cx2-sandyb"
+    export PYOP2_SIMD_ISA=avx
+    cx2_setup
 elif [ "$nodename" -eq 5 ]; then
-    nodename="cx2-haswell"
-    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
-    module load gcc
-    module load mpi
+    export nodename="cx2-haswell"
+    export PYOP2_SIMD_ISA=avx
+    cx2_setup
 elif [ "$nodename" -eq 6 ]; then
-    nodename="cx2-broadwell"
-    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
-    module load gcc
-    module load mpi
+    export nodename="cx2-broadwell"
+    export PYOP2_SIMD_ISA=avx
+    cx2_setup
 else
     echo "Unrecognized nodename: $nodename"
     echo "Run as: nodename=integer h=float poly=integer executor.sh"
     exit
 fi
+
+### System-specific setup - END ###
 
 MPICMD="$MPICMD python explosive_source.py $OPTS"
 
@@ -139,7 +167,5 @@ do
     done
 done
 
-export OMP_NUM_THREADS=4
-export KMP_AFFINITY=scatter
-export SLOPE_BACKEND=OMP
-echo "No OMP experiments set"
+# Copy output back to $WORK
+pbsdsh cp -r $TMPDIR/output $WORK
