@@ -104,7 +104,8 @@ class ElasticLF4(object):
         if self.output:
             # File output streams
             platform = os.environ.get('NODENAME', 'unknown')
-            base = os.path.join('/', 'work', 'fl1612', 'output', platform,
+            tmpdir = os.environ['TMPDIR']
+            base = os.path.join(tmpdir, 'output', platform,
                                 'p%d' % self.degree, 'uf%d' % self.tiling_uf)
             if op2.MPI.COMM_WORLD.rank == 0:
                 if not os.path.exists(base):
@@ -315,8 +316,8 @@ class ElasticLF4(object):
         if identifier in self.asts:
             return self.asts[identifier]
 
-        from coffee.system import isa
-        if cdim and cdim % isa['dp_reg'] == 0:
+        from coffee import isa, options
+        if cdim and cdim % isa['dp_reg'] == 0 and options['compiler'] == 'intel':
             simd_pragma = '#pragma simd reduction(+:sum)'
         else:
             simd_pragma = ''
