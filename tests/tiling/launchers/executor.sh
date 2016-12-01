@@ -4,50 +4,8 @@ cd $FIREDRAKE_MAIN_DIR
 source setenv.env
 cd $SEIGEN_DIR
 
-mkdir -p output
-
-OPTS="-log_view --output 10000 --coffee-opt O3"
-TILE_OPTS="--fusion-mode only_tile --coloring default"
-
-LOG=""
-
-# Copy the mesh to a local TMP directory
-pbsdsh cp $WORK/meshes/wave_elastic/domain$h.msh $TMPDIR
-MESHES=$TMPDIR
-
 TSFC_CACHE=$FIREDRAKE_MAIN_DIR/firedrake-cache/tsfc-cache
 PYOP2_CACHE=$FIREDRAKE_MAIN_DIR/firedrake-cache/pyop2-cache
-
-export OMP_NUM_THREADS=1
-export SLOPE_BACKEND=SEQUENTIAL
-
-# The execution modes
-declare -a em_all=(2 3)
-
-# Extra options for each mode
-declare -a opts_em1=("--glb-maps")
-declare -a opts_em2=("--glb-maps")
-declare -a opts_em3=("--glb-maps")
-
-# Tile sizes for each poly order
-declare -a ts_p1=(140 250 320 400)
-declare -a ts_p2=(70 140 200 300)
-declare -a ts_p3=(30 45 60 75)
-declare -a ts_p4=(10 20 30 40)
-
-# Partition modes for each poly order
-declare -a partitionings=("chunk")
-
-# Meshes
-declare -a meshes=("--mesh-file $MESHES/domain$h.msh --mesh-spacing $h")
-
-# The polynomial orders tested
-if [ -z "$poly" ]; then
-    echo "Warning: testing all polynomial orders [1, 2, 3, 4]"
-    declare -a polys=(1 2 3 4)
-else
-    declare -a polys=($poly)
-fi
 
 ### System-specific setup - BEGIN ###
 
@@ -59,6 +17,7 @@ function erebus_setup {
 }
 
 function cx1_setup {
+    WORKDIR=$WORK
     MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
     export PYOP2_BACKEND_COMPILER=intel
     module load intel-suite/2016.3
@@ -67,9 +26,10 @@ function cx1_setup {
 }
 
 function cx2_setup {
+    WORKDIR=$SCRATCH
+    MPICMD="mpiexec"
     export FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE
     export PYOP2_CACHE_DIR=$PYOP2_CACHE
-    MPICMD="mpiexec"
     module load gcc
     module load mpi
     export PYOP2_BACKEND_COMPILER=gnu
@@ -117,6 +77,46 @@ fi
 
 ### System-specific setup - END ###
 
+mkdir -p output
+
+OPTS="-log_view --output 10000 --coffee-opt O3"
+TILE_OPTS="--fusion-mode only_tile --coloring default"
+
+LOG=""
+
+MESHES=$WORKDIR/meshes/wave_elastic/
+
+export OMP_NUM_THREADS=1
+export SLOPE_BACKEND=SEQUENTIAL
+
+# The execution modes
+declare -a em_all=(2 3)
+
+# Extra options for each mode
+declare -a opts_em1=("--glb-maps")
+declare -a opts_em2=("--glb-maps")
+declare -a opts_em3=("--glb-maps")
+
+# Tile sizes for each poly order
+declare -a ts_p1=(140 250 320 400)
+declare -a ts_p2=(70 140 200 300)
+declare -a ts_p3=(30 45 60 75)
+declare -a ts_p4=(10 20 30 40)
+
+# Partition modes for each poly order
+declare -a partitionings=("chunk")
+
+# Meshes
+declare -a meshes=("--mesh-file $MESHES/domain$h.msh --mesh-spacing $h")
+
+# The polynomial orders tested
+if [ -z "$poly" ]; then
+    echo "Warning: testing all polynomial orders [1, 2, 3, 4]"
+    declare -a polys=(1 2 3 4)
+else
+    declare -a polys=($poly)
+fi
+
 MPICMD="$MPICMD python explosive_source.py $OPTS"
 
 # If only logging tiling stuff, tweak a few things to run only what is strictly necessary
@@ -131,7 +131,7 @@ fi
 
 for poly in ${polys[@]}
 do
-    output_file="output/output_p"$poly"_h"$h"_"$nodename".txt"
+    output_file=$WORKDIR"/output_p"$poly"_h"$h"_"$nodename".txt"
     rm -f $output_file
     touch $output_file
     echo "Polynomial order "$poly
@@ -165,7 +165,8 @@ do
             done
         done
     done
+    mv $output_file "output/"
 done
 
-# Copy output back to $WORK
-pbsdsh cp -r $TMPDIR/output $WORK
+# Copy output back to $WORKDIR
+pbsdsh cp $TMPDIR/output $SCRATCH

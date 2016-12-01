@@ -4,22 +4,6 @@ cd $FIREDRAKE_MAIN_DIR
 source setenv.env
 cd $SEIGEN_DIR
 
-mkdir -p output
-
-export OMP_NUM_THREADS=1
-export SLOPE_BACKEND=SEQUENTIAL
-
-OPTS="--output 10000 --time-max 0.05 --no-tofile --coffee-opt O3"
-TILE_OPTS="--fusion-mode only_tile --coloring default"
-
-# Copy the mesh to a local TMP directory
-pbsdsh cp $WORK/meshes/wave_elastic/domain$h.msh $TMPDIR
-MESHES=$TMPDIR
-
-LOGGER=$TMPDIR"/logger_"$nodename"_cache_populator.txt"
-rm -f $LOGGER
-touch $LOGGER
-
 export TSFC_CACHE=$TMPDIR/tsfc-cache
 export PYOP2_CACHE=$TMPDIR/pyop2-cache
 
@@ -33,6 +17,7 @@ function erebus_setup {
 }
 
 function cx1_setup {
+    WORKDIR=$WORK
     MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
     export PYOP2_BACKEND_COMPILER=intel
     module load intel-suite/2016.3
@@ -41,9 +26,10 @@ function cx1_setup {
 }
 
 function cx2_setup {
+    WORKDIR=$SCRATCH
+    MPICMD="mpiexec"
     export FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE
     export PYOP2_CACHE_DIR=$PYOP2_CACHE
-    MPICMD="mpiexec"
     module load gcc
     module load mpi
     export PYOP2_BACKEND_COMPILER=gnu
@@ -91,6 +77,20 @@ fi
 
 ### System-specific setup - END ###
 
+mkdir -p output
+
+export OMP_NUM_THREADS=1
+export SLOPE_BACKEND=SEQUENTIAL
+
+OPTS="--output 10000 --time-max 0.05 --no-tofile --coffee-opt O3"
+TILE_OPTS="--fusion-mode only_tile --coloring default"
+
+MESHES=$WORKDIR/meshes/wave_elastic/
+
+LOGGER=$TMPDIR"/logger_"$nodename"_cache_populator.txt"
+rm -f $LOGGER
+touch $LOGGER
+
 MPICMD="$MPICMD python explosive_source.py $OPTS"
 
 declare -a polys=($poly)
@@ -113,7 +113,7 @@ declare -a em_all=(2 3)
 # Populate the local cache
 for poly in ${polys[@]}
 do
-    output_file="output/populator_p"$poly"_h"$h"_"$nodename".txt"
+    output_file=$WORKDIR"/populator_p"$poly"_h"$h"_"$nodename".txt"
     rm -f $output_file
     touch $output_file
     echo "Populate polynomial order "$poly >> $LOGGER
@@ -141,6 +141,7 @@ do
             done
         done
     done
+    mv $output_file "output/"
 done
 
 rm $LOGGER

@@ -57,7 +57,7 @@ if [ "$mode" == "populator" ]; then
             elif [ "$node" == "cx1-haswell" ]; then
                 qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=20:mem=60gb -q pqcdt launchers/cache_populator.sh
             elif [ "$node" == "cx2-westmere" ]; then
-                qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=12:mpiprocs=12 launchers/cache_populator.sh
+                qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=12:mpiprocs=12:mem=32gb launchers/cache_populator.sh
             fi
         done
     done
@@ -73,7 +73,7 @@ elif [ "$mode" == 'singlenode' ]; then
             elif [ "$node" == "cx1-haswell" ]; then
                 qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=20:mem=32gb:icib=true -q pqcdt launchers/executor.sh
             elif [ "$node" == "cx2-westmere" ]; then
-                qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=12:mpiprocs=12 launchers/executor.sh
+                qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=12:mpiprocs=12:mem=32gb launchers/executor.sh
             fi
         done
     done
