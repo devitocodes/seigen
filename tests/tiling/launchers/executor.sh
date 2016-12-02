@@ -37,8 +37,6 @@ function cx2_setup {
     export MPICXX_CXX=g++
     export MPIF08_F08=gfortran
     export MPIF90_F90=gfortran
-    export PETSC_CONFIGURE_OPTIONS=--download-fblaslapack
-    export PATH=$HOME/.local/bin:$PATH
 }
 
 if [ "$nodename" -eq 0 ]; then
@@ -79,15 +77,12 @@ fi
 
 mkdir -p output
 
-OPTS="-log_view --output 10000 --coffee-opt O3"
-TILE_OPTS="--fusion-mode only_tile --coloring default"
-
-LOG=""
-
 MESHES=$WORKDIR/meshes/wave_elastic/
 
-export OMP_NUM_THREADS=1
 export SLOPE_BACKEND=SEQUENTIAL
+
+# The run modes (dry run, normal run)
+declare -a runs=("--output 10000 --time-max 0.05 --no-tofile --coffee-opt O3" "-log_view --output 10000 --coffee-opt O3")
 
 # The execution modes
 declare -a em_all=(2 3)
@@ -117,56 +112,58 @@ else
     declare -a polys=($poly)
 fi
 
-MPICMD="$MPICMD python explosive_source.py $OPTS"
+MPICMD="$MPICMD python explosive_source.py"
 
 # If only logging tiling stuff, tweak a few things to run only what is strictly necessary
 if [ "$1" == "onlylog" ]; then
-    declare -a polys=(2)
-    declare -a mesh_p2=("--mesh-size (300.0,150.0,1.2)")
-    declare -a part_p2=("chunk")
-    LOG="--log --time_max 0.05"
-    EXTRA_OUT="(Just logging!)"
+    declare -a polys=(1)
+    declare -a runs=("--output 100000 --time-max 0.05 --no-tofile --coffee-opt O3 --log")
     mkdir -p all-logs
 fi
 
-for poly in ${polys[@]}
+for run in ${runs[@]}
 do
-    output_file=$WORKDIR"/output_p"$poly"_h"$h"_"$nodename".txt"
-    rm -f $output_file
-    touch $output_file
-    echo "Polynomial order "$poly
-    for mesh in "${meshes[@]}"
+    for poly in ${polys[@]}
     do
-        echo "    Running "$mesh
-        echo "        Untiled ..."$EXTRA_OUT
-        $MPICMD --poly-order $poly $mesh --num-unroll 0 $LOG 1>> $output_file 2>> $output_file
-        $MPICMD --poly-order $poly $mesh --num-unroll 0 $LOG 1>> $output_file 2>> $output_file
-        $MPICMD --poly-order $poly $mesh --num-unroll 0 $LOG 1>> $output_file 2>> $output_file
-        for p in "${partitionings[@]}"
+        output_file=$WORKDIR"/output_p"$poly"_h"$h"_"$nodename".txt"
+        rm -f $output_file
+        touch $output_file
+        echo "Polynomial order "$poly
+        for mesh in "${meshes[@]}"
         do
-            for em in ${em_all[@]}
+            MPICMD="$MPICMD python explosive_source.py --poly-order $poly $mesh $run"
+            echo "    Running "$mesh
+            echo "        Untiled ..."
+            $MPICMD --num-unroll 0 1>> $output_file 2>> $output_file
+            $MPICMD --num-unroll 0 1>> $output_file 2>> $output_file
+            $MPICMD --num-unroll 0 1>> $output_file 2>> $output_file
+            for p in "${partitionings[@]}"
             do
-                opts="opts_em$em[@]"
-                opts_em=( "${!opts}" )
-                for opt in "${opts_em[@]}"
+                for em in ${em_all[@]}
                 do
-                    ts_p="ts_p$poly[*]"
-                    for ts in ${!ts_p}
+                    opts="opts_em$em[@]"
+                    opts_em=( "${!opts}" )
+                    for opt in "${opts_em[@]}"
                     do
-                        echo "        Tiled (pm="$p", ts="$ts", em="$em") ..."$EXTRA_OUT
-                        $MPICMD --poly-order $poly $mesh --num-unroll 1 --tile-size $ts --part-mode $p --explicit-mode $em $TILE_OPTS $opt $LOG 1>> $output_file 2>> $output_file
-                        if [ "$1" == "onlylog" ]; then
-                            logdir=log_p"$poly"_em"$em"_part"$part"_ts"$ts"
-                            mv log $logdir
-                            mv $logdir all-logs
-                        fi
+                        ts_p="ts_p$poly[*]"
+                        for ts in ${!ts_p}
+                        do
+                            echo "        Tiled (pm="$p", ts="$ts", em="$em") ..."
+                            TILING="--tile-size $ts --part-mode $p --explicit-mode $em --fusion-mode only_tile --coloring default $opt"
+                            $MPICMD --num-unroll 1 $TILING 1>> $output_file 2>> $output_file
+                            if [ "$1" == "onlylog" ]; then
+                                logdir=log_p"$poly"_em"$em"_part"$part"_ts"$ts"
+                                mv log $logdir
+                                mv $logdir all-logs
+                            fi
+                        done
                     done
                 done
             done
         done
+        mv $output_file "output/"
     done
-    mv $output_file "output/"
 done
 
 # Copy output back to $WORKDIR
-pbsdsh cp $TMPDIR/output $SCRATCH
+pbsdsh -- cp -r $TMPDIR/output $SCRATCH
