@@ -11,7 +11,7 @@ import numpy as np
 from opescibench import Executor
 
 try:
-    from opescibench import Plotter, LinePlotter, BarchartPlotter
+    from opescibench import Plotter, LinePlotter, BarchartPlotter, AxisScale
 except:
     Plotter = None
     LinePlotter = None
@@ -218,23 +218,34 @@ if __name__ == '__main__':
             figname = 'SeigenError_%s.pdf' % args.field
             events = ['%s:summary' % s for s in stages]
             with LinePlotter(figname=figname, plotdir=args.plotdir,
+                             xscale=AxisScale(scale='log', base=10., dtype=np.float32),
                              xlabel='Error in L2 norm',
+                             yscale=AxisScale(scale='log', base=2., dtype=np.int32),
                              ylabel='Wall time (s)',
-                             xbase=10., xtype=np.float32,
+                             legend={'ncol': 4},
                              plot_type='loglog') as error_cost:
                 # Sweep over degrees
                 for d in params['degree']:
                     time = []
                     error = []
+                    annotations = []
                     for key in bench.sweep(keys={'degree': d}):
                         ev_time = bench.lookup(params=key, measure='time',
                                                event=events).values()
-                        err = bench.lookup(params=key, category='meta',
-                                           measure='%s_error' % args.field).values()
+                        try:
+                            err = bench.lookup(params=key, category='meta',
+                                               measure='%s_error' % args.field).values()
+                        except:
+                            # Skip this point if no error values are available
+                            continue
                         if len(ev_time) > 0:
                             time += [sum(ev_time[0])]
                             error += err
-                    error_cost.add_line(error, time)
+                            annotations += ['dx=%0.3f' % (1. / key['size'])]
+                    style = '-%s%s' % (error_cost.marker[d-1], error_cost.color[d-1])
+                    label = r'P$_{%d}$DG' % d
+                    error_cost.add_line(error, time, style=style, label=label,
+                                        annotations=annotations)
 
         elif args.plottype == 'roofline':
             for kernel in args.kernel:
