@@ -69,11 +69,11 @@ elif [ "$mode" == 'singlenode' ]; then
             if [ "$node" == "erebus" ]; then
                 nodename=$nodeid poly=$poly h=$h ./launchers/executor.sh
             elif [ "$node" == "cx1-ivy" ]; then
-                qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=20:mem=32gb:ivyb=true launchers/executor.sh
+                qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=24:00:00 -l select=1:ncpus=20:mem=32gb:ivyb=true launchers/executor.sh
             elif [ "$node" == "cx1-haswell" ]; then
-                qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=20:mem=32gb:icib=true -q pqcdt launchers/executor.sh
+                qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=24:00:00 -l select=1:ncpus=20:mem=32gb:icib=true -q pqcdt launchers/executor.sh
             elif [ "$node" == "cx2-westmere" ]; then
-                qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=72:00:00 -l select=1:ncpus=12:mpiprocs=12:mem=32gb launchers/executor.sh
+                qsub -v nodename=$nodeid,poly=$poly,h=$h -l walltime=24:00:00 -l select=1:ncpus=12:mpiprocs=12:mem=32gb launchers/executor.sh
             fi
         done
     done

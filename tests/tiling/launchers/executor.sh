@@ -13,13 +13,11 @@ PYOP2_CACHE=$FIREDRAKE_MAIN_DIR/firedrake-cache/pyop2-cache
 
 function erebus_setup {
     MPICMD="mpirun -np 4 --bind-to-core -x FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE -x PYOP2_CACHE_DIR=$PYOP2_CACHE -x NODENAME=$nodename"
-    export PYOP2_BACKEND_COMPILER=intel
 }
 
 function cx1_setup {
     WORKDIR=$WORK
     MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
-    export PYOP2_BACKEND_COMPILER=intel
     module load intel-suite/2016.3
     module load mpi/intel-5.1.1.109
     module load mpi4py/1.3.1
@@ -31,13 +29,11 @@ function cx2_setup {
     export FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE
     export PYOP2_CACHE_DIR=$PYOP2_CACHE
     module load gcc
+    module load intel-suite
     module load mpi
-    export PYOP2_BACKEND_COMPILER=gnu
-    export MPICC_CC=gcc
-    export MPICXX_CXX=g++
-    export MPIF08_F08=gfortran
-    export MPIF90_F90=gfortran
 }
+
+export PYOP2_BACKEND_COMPILER=intel
 
 if [ "$nodename" -eq 0 ]; then
     export nodename="erebus-sandyb"
@@ -121,7 +117,7 @@ if [ "$1" == "onlylog" ]; then
     mkdir -p all-logs
 fi
 
-for run in ${runs[@]}
+for run in "${runs[@]}"
 do
     for poly in ${polys[@]}
     do
@@ -131,12 +127,12 @@ do
         echo "Polynomial order "$poly
         for mesh in "${meshes[@]}"
         do
-            MPICMD="$MPICMD python explosive_source.py --poly-order $poly $mesh $run"
+            PROBLEM="--poly-order $poly $mesh $run"
             echo "    Running "$mesh
             echo "        Untiled ..."
-            $MPICMD --num-unroll 0 1>> $output_file 2>> $output_file
-            $MPICMD --num-unroll 0 1>> $output_file 2>> $output_file
-            $MPICMD --num-unroll 0 1>> $output_file 2>> $output_file
+            $MPICMD $PROBLEM --num-unroll 0 1>> $output_file 2>> $output_file
+            $MPICMD $PROBLEM --num-unroll 0 1>> $output_file 2>> $output_file
+            $MPICMD $PROBLEM --num-unroll 0 1>> $output_file 2>> $output_file
             for p in "${partitionings[@]}"
             do
                 for em in ${em_all[@]}
@@ -150,7 +146,7 @@ do
                         do
                             echo "        Tiled (pm="$p", ts="$ts", em="$em") ..."
                             TILING="--tile-size $ts --part-mode $p --explicit-mode $em --fusion-mode only_tile --coloring default $opt"
-                            $MPICMD --num-unroll 1 $TILING 1>> $output_file 2>> $output_file
+                            $MPICMD $PROBLEM --num-unroll 1 $TILING 1>> $output_file 2>> $output_file
                             if [ "$1" == "onlylog" ]; then
                                 logdir=log_p"$poly"_em"$em"_part"$part"_ts"$ts"
                                 mv log $logdir
