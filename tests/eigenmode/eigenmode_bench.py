@@ -186,8 +186,13 @@ if __name__ == '__main__':
             events = ['%s:summary' % s for s in stages]
             # Plot strong scalability
             with LinePlotter(figname=figname, plotdir=args.plotdir,
+                             xscale=AxisScale(values=args.nprocs, dtype=np.int32),
                              xlabel='Number of processors',
-                             ylabel='Wall time (s)') as scaling:
+                             yscale=AxisScale(scale='log', base=2., dtype=np.int32),
+                             ylabel='Wall time (s)',
+                             yscale2=AxisScale(scale='linear', base=0.1,
+                                               minval=0., dtype=np.float32),
+                             ylabel2='Parallel efficiency') as scaling:
                 # Sweep over everything but 'nprocs'
                 for key in bench.sweep(keys={'nprocs': params['nprocs'][0]}):
                     time = []
@@ -195,22 +200,12 @@ if __name__ == '__main__':
                         key['nprocs'] = p
                         time += [sum(bench.lookup(params=key, measure='time',
                                                   event=events).values()[0])]
-                    scaling.add_line(params['nprocs'], time)
-
-            # Plot parallel efficiency
-            with LinePlotter(figname=effname, plotdir=args.plotdir,
-                             xlabel='Number of processors',
-                             ylabel='Parallel efficiency',
-                             plot_type='semilogx', ytype=np.float32) as efficiency:
-                # Sweep over everything but 'nprocs'
-                for key in bench.sweep(keys={'nprocs': params['nprocs'][0]}):
-                    time = []
-                    for p in params['nprocs']:
-                        key['nprocs'] = p
-                        time += [sum(bench.lookup(params=key, measure='time',
-                                                  event=events).values()[0])]
-                    eff = [t / time[0] for t in time]
-                    efficiency.add_line(params['nprocs'], eff)
+                    speedup = [time[0] / t  for t in time]
+                    efficiency = np.array([s / n * params['nprocs'][0]
+                                           for s, n in zip(speedup, args.nprocs)])
+                    scaling.add_line(params['nprocs'], time, label='Runtime', style='k-')
+                    scaling.add_line(params['nprocs'], efficiency, secondary=True,
+                                     label='Parallel efficiency', style='k:')
 
         elif args.plottype == 'error':
             # Plot error-cost diagram
