@@ -317,7 +317,7 @@ class ElasticLF4(object):
             return self.asts[identifier]
 
         from coffee import isa, options
-        if cdim and cdim % isa['dp_reg'] == 0 and options['compiler'] == 'intel':
+        if cdim and cdim % isa['dp_reg'] == 0:
             simd_pragma = '#pragma simd reduction(+:sum)'
         else:
             simd_pragma = ''
