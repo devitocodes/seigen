@@ -323,7 +323,7 @@ class ElasticLF4(object):
             simd_pragma = ''
 
         # Craft the AST
-        if implementation == 'optimized':
+        if implementation == 'optimized' and cdim >= 4:
             body = ast.Incr(ast.Symbol('sum'),
                             ast.Prod(ast.Symbol('A', ('i',), ((ndofs*cdim, 'j*%d + k' % cdim),)),
                                      ast.Symbol('B', ('j', 'k'))))
