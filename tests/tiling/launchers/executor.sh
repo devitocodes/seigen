@@ -28,6 +28,7 @@ function cx2_setup {
     MPICMD="mpiexec"
     export FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE
     export PYOP2_CACHE_DIR=$PYOP2_CACHE
+    export NODENAME=$nodename
     module load gcc
     module load intel-suite
     module load mpi
@@ -108,7 +109,11 @@ else
     declare -a polys=($poly)
 fi
 
-MPICMD="$MPICMD python explosive_source.py"
+if [ -z "$np" ]; then
+    MPICMD="$MPICMD python explosive_source.py"
+else
+    MPICMD="$MPICMD -n $np python explosive_source.py"
+fi
 
 # If only logging tiling stuff, tweak a few things to run only what is strictly necessary
 if [ "$1" == "onlylog" ]; then
