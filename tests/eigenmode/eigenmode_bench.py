@@ -11,7 +11,7 @@ import numpy as np
 from opescibench import Executor
 
 try:
-    from opescibench import Plotter, LinePlotter, BarchartPlotter, AxisScale
+    from opescibench import Plotter, LinePlotter, BarchartPlotter, RooflinePlotter, AxisScale
 except:
     Plotter = None
     LinePlotter = None
@@ -244,24 +244,40 @@ if __name__ == '__main__':
 
         elif args.plottype == 'roofline':
             for kernel in args.kernel:
+                profiles = bench.lookup(params=params, measure="kernel_profile",
+                                        category='meta')
                 for pltype, plname in ploop_types.items():
+                    # Skip Parloop types that have not been recorded
+                    if plname not in profiles.values()[0][kernel]:
+                        continue
+
+                    # Create plot for each Parloop type
                     figname = 'SeigenRoofline_%s_%s.pdf' % (kernel, pltype)
-                    flops_s = {}
-                    op_int = {}
-                    for deg, opt in product(args.degree, args.opt):
-                        params = {'degree': deg, 'opt': opt}
-                        event = '%s:%s' % (kernel, plname)
-                        label = u'P%d$_{DG}$: %s' % (deg, 'Raw' if opt == 0 else 'Opt')
-                        profile = bench.lookup(params=params, measure='kernel_profile',
-                                               category='meta')[0][kernel]
-                        if plname in profile:
-                            time = bench.lookup(params=params, event=event, measure='time')
-                            flops = bench.lookup(params=params, event=event, measure='flops')
-                            assert(len(time) == 1 and len(flops) == 1)
-                            flops_s[label] = (flops[0] / 1.e6 / time[0])
-                            op_int[label] = profile[plname]['ai']
-                    if len(flops_s) > 0:
-                        plotter.plot_roofline(figname, flops_s, op_int)
+                    event = '%s:%s' % (kernel, plname)
+                    flops = bench.lookup(params=params, measure="flops", event=event)
+                    times = bench.lookup(params=params, measure="time", event=event)
+                    with RooflinePlotter(figname=figname, plotdir=args.plotdir,
+                                         max_bw=args.max_bw, max_flops=args.max_flops,
+                                         legend={'fontsize': 8}) as roofline:
+                        for key, profile in profiles.items():
+                            gflopss  = flops[key] / 1.e9 / times[key]
+                            oi = profiles[key][kernel][plname]['ai']
+                            time = times[key]
+                            key = dict(key)
+                            degree = key['degree']
+                            label = r'%s P$_{%d}$DG, O%d' % (pltype.capitalize(),
+                                                                key['degree'], key['opt'])
+                            style = '%s%s' % (roofline.color[degree-1],
+                                              "D" if key['opt'] >= 2 else "o")
+                            oi_annotate = {'s': '',
+                                           'size': 6, 'xy': (oi, 0.09)}
+                            point_annotate = {'s': "%.1f s" % time,
+                                              'xytext': (-22, 18), 'size': 6,
+                                              'weight': 'bold'}
+
+                            roofline.add_point(gflops=gflopss, oi=oi, style=style, label=label,
+                                               oi_annotate=oi_annotate, annotate=point_annotate)
+
 
         elif args.plottype == 'compare':
             # Barchart comparison of optimised vs. unoptimised runs on
