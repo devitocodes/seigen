@@ -164,4 +164,5 @@ do
 done
 
 # Copy output back to $WORKDIR
-pbsdsh -- cp -r $TMPDIR/output $SCRATCH
+mv $TMPDIR/output $SCRATCH
+mv $SCRATCH/output $SCRATCH/output_p$poly
