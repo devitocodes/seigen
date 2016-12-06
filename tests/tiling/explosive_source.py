@@ -32,7 +32,7 @@ class ElasticLF4(object):
     loop_chain_length = 28
     num_solves = 8
 
-    def __init__(self, mesh, family, degree, dimension, output=1, tiling=None):
+    def __init__(self, mesh, family, degree, dimension, output=1, params=None):
         r""" Initialise a new elastic wave simulation.
 
         :param mesh: The underlying computational mesh of vertices and edges.
@@ -40,13 +40,15 @@ class ElasticLF4(object):
         :param int degree: Use polynomial basis functions of this degree.
         :param int dimension: The spatial dimension of the problem (1, 2 or 3).
         :param int output: period, in timesteps, to write solution fields to a file.
-        :param dict tiling: Parameters driving tiling (tile size, unroll factor, mode, ...)
+        :param dict params: simulation and optimisation parameters
         :returns: None
         """
         self.degree = degree
         self.mesh = mesh
         self.dimension = dimension
         self.output = output
+
+        self.tofile = params['tofile']
 
         self.S = TensorFunctionSpace(mesh, family, degree, name='S')
         self.U = VectorFunctionSpace(mesh, family, degree, name='U')
@@ -85,23 +87,23 @@ class ElasticLF4(object):
         self.I = Identity(self.dimension)
 
         # Tiling options
-        self.tiling_size = tiling['tile_size']
-        self.tiling_uf = tiling['num_unroll']
-        self.tiling_mode = tiling['mode']
-        self.tiling_halo = tiling['extra_halo']
-        self.tiling_explicit = tiling['explicit_mode']
-        self.tiling_explicit_id = tiling['explicit_mode_id']
-        self.tiling_log = tiling['log']
-        self.tiling_sdepth = tiling['s_depth']
-        self.tiling_part = tiling['partitioning']
-        self.tiling_coloring = tiling['coloring']
-        self.tiling_glb_maps = tiling['use_glb_maps']
-        self.tiling_prefetch = tiling['use_prefetch']
+        self.tiling_size = params['tile_size']
+        self.tiling_uf = params['num_unroll']
+        self.tiling_mode = params['mode']
+        self.tiling_halo = params['extra_halo']
+        self.tiling_explicit = params['explicit_mode']
+        self.tiling_explicit_id = params['explicit_mode_id']
+        self.tiling_log = params['log']
+        self.tiling_sdepth = params['s_depth']
+        self.tiling_part = params['partitioning']
+        self.tiling_coloring = params['coloring']
+        self.tiling_glb_maps = params['use_glb_maps']
+        self.tiling_prefetch = params['use_prefetch']
 
         # Mat-vec AST cache
         self.asts = {}
 
-        if self.output:
+        if self.tofile:
             # File output streams
             platform = os.environ.get('NODENAME', 'unknown')
             tmpdir = os.environ['TMPDIR']
@@ -391,7 +393,7 @@ class ElasticLF4(object):
         """
 
         # Write out the initial condition.
-        self.write(self.u1, self.s1)
+        self.write(self.u1, self.s1, self.tofile)
 
         info("Generating inverse mass matrix")
         # Pre-assemble the inverse mass matrices, which should stay
@@ -447,14 +449,14 @@ class ElasticLF4(object):
             self.s0.assign(self.s1)
 
             # Write out the new fields
-            self.write(self.u1, self.s1, timestep % self.output == 0)
+            self.write(self.u1, self.s1, self.tofile and timestep % self.output == 0)
 
             # Move onto next timestep
             t += self.dt
             timestep += 1
 
         # Write out the final state of the fields
-        self.write(self.u1, self.s1)
+        self.write(self.u1, self.s1, self.tofile)
 
         end = time()
 
@@ -509,17 +511,17 @@ def cfl_dt(dx, Vp, courant_number):
 class ExplosiveSourceLF4(object):
 
     def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, cn=0.05,
-                             mesh_file=None, output=1, poly_order=2, tiling=None):
+                             mesh_file=None, output=1, poly_order=2, params=None):
 
-        tile_size = tiling['tile_size']
-        num_unroll = tiling['num_unroll']
-        extra_halo = tiling['extra_halo']
-        part_mode = tiling['partitioning']
-        explicit_mode = tiling['explicit_mode']
+        tile_size = params['tile_size']
+        num_unroll = params['num_unroll']
+        extra_halo = params['extra_halo']
+        part_mode = params['partitioning']
+        explicit_mode = params['explicit_mode']
 
         if explicit_mode:
             fusion_scheme = FusionSchemes.get(explicit_mode, part_mode, tile_size)
-            num_solves, tiling['explicit_mode'] = fusion_scheme
+            num_solves, params['explicit_mode'] = fusion_scheme
         else:
             num_solves = ElasticLF4.num_solves
 
@@ -531,7 +533,7 @@ class ExplosiveSourceLF4(object):
         set_log_level(INFO)
 
         kwargs = {}
-        if tiling['mode'] in ['tile', 'only_tile']:
+        if params['mode'] in ['tile', 'only_tile']:
             s_depth = calculate_sdepth(num_solves, num_unroll, extra_halo)
             if part_mode == 'metis':
                 kwargs['reorder'] = ('metis-rcm', mesh.num_cells() / tile_size)
@@ -539,13 +541,13 @@ class ExplosiveSourceLF4(object):
             s_depth = 1
         # FIXME: need s_depth in firedrake to be able to use this
         # kwargs['s_depth'] = s_depth
-        tiling['s_depth'] = s_depth
+        params['s_depth'] = s_depth
 
         mesh.topology.init(**kwargs)
         slope(mesh, debug=True)
 
         # Instantiate the model
-        self.elastic = ElasticLF4(mesh, "DG", poly_order, 2, output, tiling)
+        self.elastic = ElasticLF4(mesh, "DG", poly_order, 2, output, params)
 
         info("S-depth used: %d" % s_depth)
         info("Polynomial order: %d" % poly_order)
@@ -592,7 +594,7 @@ class ExplosiveSourceLF4(object):
 
         # Print runtime summary
         output_time(start, end,
-                    tofile=tiling['tofile'],
+                    tofile=params['tofile'],
                     verbose=True,
                     meshid=("h%s" % h).replace('.', ''),
                     nloops=ElasticLF4.loop_chain_length*num_unroll,
@@ -600,9 +602,9 @@ class ExplosiveSourceLF4(object):
                     tile_size=tile_size,
                     extra_halo=extra_halo,
                     explicit_mode=explicit_mode,
-                    glb_maps=tiling['use_glb_maps'],
-                    prefetch=tiling['use_prefetch'],
-                    coloring=tiling['coloring'],
+                    glb_maps=params['use_glb_maps'],
+                    prefetch=params['use_prefetch'],
+                    coloring=params['coloring'],
                     poly_order=poly_order,
                     domain=os.path.splitext(os.path.basename(mesh.name))[0],
                     function_spaces=[self.elastic.S, self.elastic.U])
@@ -615,7 +617,7 @@ if __name__ == '__main__':
 
     # Parse the input
     args = parser()
-    tiling = {
+    params = {
         'num_unroll': args.num_unroll,
         'tile_size': args.tile_size,
         'mode': args.fusion_mode,
@@ -638,10 +640,10 @@ if __name__ == '__main__':
         Lx, Ly, h, time_max, tolerance = 20, 20, 2.5, 0.01, 1e-10
         info("Checking correctness of original and tiled versions, with:")
         info("    (Lx, Ly, T, tolerance)=%s" % str((Lx, Ly, time_max, tolerance)))
-        info("    %s" % tiling)
+        info("    %s" % params)
         # Run the tiled variant
         u1, s1 = ExplosiveSourceLF4().explosive_source_lf4(time_max, Lx, Ly, h,
-                                                           sys.maxint, tiling)
+                                                           sys.maxint, params)
         # Run the original code
         original = {'num_unroll': 0, 'tile_size': 0, 'mode': None,
                     'partitioning': 'chunk', 'extra_halo': 0}
@@ -658,12 +660,12 @@ if __name__ == '__main__':
     if args.mesh_file:
         info("Using the unstructured mesh %s" % args.mesh_file)
         kwargs = {'T': args.time_max, 'mesh_file': args.mesh_file, 'h': args.ms, 'cn': args.cn,
-                  'output': args.output, 'poly_order': args.poly_order, 'tiling': tiling}
+                  'output': args.output, 'poly_order': args.poly_order, 'params': params}
     else:
         Lx, Ly = eval(args.mesh_size)
         info("Using the structured mesh with values (Lx,Ly,h)=%s" % str((Lx, Ly, args.ms)))
         kwargs = {'T': args.time_max, 'Lx': Lx, 'Ly': Ly, 'h': args.ms, 'output': args.output,
-                  'poly_order': args.poly_order, 'tiling': tiling}
+                  'poly_order': args.poly_order, 'params': params}
 
     info("h=%f, courant number=%f" % (args.ms, args.cn))
 
