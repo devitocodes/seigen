@@ -11,9 +11,9 @@ import numpy as np
 from opescibench import Executor
 
 try:
-    from opescibench import Plotter, LinePlotter, BarchartPlotter, RooflinePlotter, AxisScale
+    from opescibench import LinePlotter, BarchartPlotter, RooflinePlotter, AxisScale
 except:
-    Plotter = None
+    RooflinePlotter = None
     LinePlotter = None
     BarchartPlotter = None
 
@@ -172,7 +172,6 @@ if __name__ == '__main__':
         bench.execute(executor, warmups=1, repeats=3)
         bench.save()
     elif args.mode == 'plot':
-        plotter = Plotter(plotdir=args.plotdir)
         bench.load()
         if not bench.loaded:
             warning("Could not load any results, nothing to plot. Exiting...")
