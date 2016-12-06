@@ -78,8 +78,10 @@ MESHES=$WORKDIR/meshes/wave_elastic/
 
 export SLOPE_BACKEND=SEQUENTIAL
 
-# The run modes (dry run, normal run)
-declare -a runs=("--output 10000 --time-max 0.05 --no-tofile --coffee-opt O3" "-log_view --output 10000 --coffee-opt O3")
+# Three runs: [populate cache, populate cache, normal run]
+declare -a runs=("--output 100000 --time-max 0.05 --no-tofile --coffee-opt O3 --mesh-size (50.0,25.0) --mesh-spacing $h"
+                 "--output 100000 --time-max 0.05 --no-tofile --coffee-opt O3 --mesh-file $MESHES/domain1.0.msh --mesh-spacing 1.0"
+                 "-log_view --output 100000 --coffee-opt O3 --mesh-file $MESHES/domain$h.msh --mesh-spacing $h")
 
 # The execution modes
 declare -a em_all=(2 3)
@@ -97,9 +99,6 @@ declare -a ts_p4=(10 20 30 40)
 
 # Partition modes for each poly order
 declare -a partitionings=("chunk")
-
-# Meshes
-declare -a meshes=("--mesh-file $MESHES/domain$h.msh --mesh-spacing $h")
 
 # The polynomial orders tested
 if [ -z "$poly" ]; then
@@ -129,35 +128,33 @@ do
         output_file=$WORKDIR"/output_p"$poly"_h"$h"_"$nodename".txt"
         rm -f $output_file
         touch $output_file
-        echo "Polynomial order "$poly
-        for mesh in "${meshes[@]}"
+        PROBLEM="--poly-order $poly $run"
+        echo "    Running "$PROBLEM
+
+        echo "        Untiled ..."
+        $MPICMD $PROBLEM --num-unroll 0 1>> $output_file 2>> $output_file
+        $MPICMD $PROBLEM --num-unroll 0 1>> $output_file 2>> $output_file
+        $MPICMD $PROBLEM --num-unroll 0 1>> $output_file 2>> $output_file
+
+        for p in "${partitionings[@]}"
         do
-            PROBLEM="--poly-order $poly $mesh $run"
-            echo "    Running "$mesh
-            echo "        Untiled ..."
-            $MPICMD $PROBLEM --num-unroll 0 1>> $output_file 2>> $output_file
-            $MPICMD $PROBLEM --num-unroll 0 1>> $output_file 2>> $output_file
-            $MPICMD $PROBLEM --num-unroll 0 1>> $output_file 2>> $output_file
-            for p in "${partitionings[@]}"
+            for em in ${em_all[@]}
             do
-                for em in ${em_all[@]}
+                opts="opts_em$em[@]"
+                opts_em=( "${!opts}" )
+                for opt in "${opts_em[@]}"
                 do
-                    opts="opts_em$em[@]"
-                    opts_em=( "${!opts}" )
-                    for opt in "${opts_em[@]}"
+                    ts_p="ts_p$poly[*]"
+                    for ts in ${!ts_p}
                     do
-                        ts_p="ts_p$poly[*]"
-                        for ts in ${!ts_p}
-                        do
-                            echo "        Tiled (pm="$p", ts="$ts", em="$em") ..."
-                            TILING="--tile-size $ts --part-mode $p --explicit-mode $em --fusion-mode only_tile --coloring default $opt"
-                            $MPICMD $PROBLEM --num-unroll 1 $TILING 1>> $output_file 2>> $output_file
-                            if [ "$1" == "onlylog" ]; then
-                                logdir=log_p"$poly"_em"$em"_part"$part"_ts"$ts"
-                                mv log $logdir
-                                mv $logdir all-logs
-                            fi
-                        done
+                        echo "        Tiled (pm="$p", ts="$ts", em="$em") ..."
+                        TILING="--tile-size $ts --part-mode $p --explicit-mode $em --fusion-mode only_tile --coloring default $opt"
+                        $MPICMD $PROBLEM --num-unroll 1 $TILING 1>> $output_file 2>> $output_file
+                        if [ "$1" == "onlylog" ]; then
+                            logdir=log_p"$poly"_em"$em"_part"$part"_ts"$ts"
+                            mv log $logdir
+                            mv $logdir all-logs
+                        fi
                     done
                 done
             done
