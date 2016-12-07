@@ -94,10 +94,10 @@ elif [ "$mode" == "multinode" ]; then
             echo "node=$node and mode=$mode not available yet"
             exit
         elif [ "$node" == "cx2-haswell" ]; then
-            qsub -v poly=$poly,h=1.0,nodename=$nodeid,np=24 -l walltime=12:00:00 -l select=8:ncpus=24:mem=48gb -q hastest launchers/executor.sh
-            qsub -v poly=$poly,h=0.8,nodename=$nodeid,np=48 -l walltime=24:00:00 -l select=8:ncpus=24:mem=48gb -q hastest launchers/executor.sh
-            qsub -v poly=$poly,h=0.6,nodename=$nodeid,np=96 -l walltime=36:00:00 -l select=8:ncpus=24:mem=48gb -q hastest launchers/executor.sh
-            qsub -v poly=$poly,h=0.4,nodename=$nodeid,np=192 -l walltime=48:00:00 -l select=8:ncpus=24:mem=48gb -q hastest launchers/executor.sh
+            qsub -v poly=$poly,h=1.0,nodename=$nodeid -l walltime=12:00:00 -l select=1:ncpus=24:mem=48gb -q hastest launchers/executor.sh
+            qsub -v poly=$poly,h=0.8,nodename=$nodeid -l walltime=24:00:00 -l select=2:ncpus=24:mem=48gb -q hastest launchers/executor.sh
+            qsub -v poly=$poly,h=0.6,nodename=$nodeid -l walltime=36:00:00 -l select=4:ncpus=24:mem=48gb -q hastest launchers/executor.sh
+            qsub -v poly=$poly,h=0.4,nodename=$nodeid -l walltime=48:00:00 -l select=8:ncpus=24:mem=48gb -q hastest launchers/executor.sh
         elif [ "$node" == "cx2-broadwell" ]; then
             echo "node=$node and mode=$mode not available yet"
             exit

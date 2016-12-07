@@ -12,12 +12,16 @@ PYOP2_CACHE=$FIREDRAKE_MAIN_DIR/firedrake-cache/pyop2-cache
 # Recognized systems: [Erebus (0), CX1-Ivy (1), CX1-Haswell (2), CX2-Westmere (3), CX2-SandyBridge (4), CX2-Haswell (5), CX2-Broadwell (6)]
 
 function erebus_setup {
-    MPICMD="mpirun -np 4 --bind-to-core -x FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE -x PYOP2_CACHE_DIR=$PYOP2_CACHE -x NODENAME=$nodename"
+    MPIOPTS="-np 4 --bind-to-core -x FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE -x PYOP2_CACHE_DIR=$PYOP2_CACHE -x NODENAME=$1"
+    MPICMD="mpirun -np 4 $MPIOPTS"
+    MPICMD_SN=$MPICMD
 }
 
 function cx1_setup {
     WORKDIR=$WORK
-    MPICMD="mpiexec -env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $nodename"
+    MPIOPTS="-env FIREDRAKE_TSFC_KERNEL_CACHE_DIR $TSFC_CACHE -env PYOP2_CACHE_DIR $PYOP2_CACHE -env NODENAME $1"
+    MPICMD="mpiexec $MPIOPTS"
+    MPICMD_SN="mpirun -genv I_MPI_DEVICE rdssm -genv I_MPI_DEBUG 0 -genv I_MPI_FALLBACK_DEVICE 0 -genv DAPL_MAX_CM_RETRIES 500 -genv DAPL_MAX_CM_RESPONSE_TIME 300 -genv I_MPI_DAPL_CONNECTION_TIMEOUT 300 -genv I_MPI_PIN yes -genv I_MPI_PIN_MODE lib -genv I_MPI_PIN_PROCESSOR_LIST allcores:map=bunch $MPIOPTS -n 20"
     module load intel-suite/2016.3
     module load mpi/intel-5.1.1.109
     module load mpi4py/1.3.1
@@ -26,44 +30,33 @@ function cx1_setup {
 function cx2_setup {
     WORKDIR=$SCRATCH
     MPICMD="mpiexec"
+    MPICMD_SN="mpiexec -n $2"
     export FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE
     export PYOP2_CACHE_DIR=$PYOP2_CACHE
-    export NODENAME=$nodename
+    export NODENAME=$1
     module load gcc
     module load intel-suite
     module load mpi
 }
 
 export PYOP2_BACKEND_COMPILER=intel
+export PYOP2_SIMD_ISA=avx
 
 if [ "$nodename" -eq 0 ]; then
-    export nodename="erebus-sandyb"
-    export PYOP2_SIMD_ISA=avx
-    erebus_setup
+    erebus_setup "erebus-sandyb"
 elif [ "$nodename" -eq 1 ]; then
-    export nodename="cx1-ivyb"
-    export PYOP2_SIMD_ISA=avx
-    cx1_setup
+    cx1_setup "cx1-ivyb"
 elif [ "$nodename" -eq 2 ]; then
-    export nodename="cx1-haswell"
-    export PYOP2_SIMD_ISA=avx
-    cx1_setup
+    cx1_setup "cx1-haswell"
 elif [ "$nodename" -eq 3 ]; then
-    export nodename="cx2-westmere"
     export PYOP2_SIMD_ISA=sse
-    cx2_setup
+    cx2_setup "cx2-westmere" 12
 elif [ "$nodename" -eq 4 ]; then
-    export nodename="cx2-sandyb"
-    export PYOP2_SIMD_ISA=avx
-    cx2_setup
+    cx2_setup "cx2-sandyb" 16
 elif [ "$nodename" -eq 5 ]; then
-    export nodename="cx2-haswell"
-    export PYOP2_SIMD_ISA=avx
-    cx2_setup
+    cx2_setup "cx2-haswell" 24
 elif [ "$nodename" -eq 6 ]; then
-    export nodename="cx2-broadwell"
-    export PYOP2_SIMD_ISA=avx
-    cx2_setup
+    cx2_setup "cx2-broadwell" 24
 else
     echo "Unrecognized nodename: $nodename"
     echo "Run as: nodename=integer h=float poly=integer executor.sh"
@@ -78,10 +71,13 @@ MESHES=$WORKDIR/meshes/wave_elastic/
 
 export SLOPE_BACKEND=SEQUENTIAL
 
+MPICMD="$MPICMD python explosive_source.py"
+MPICMD_SN="$MPICMD_SN python explosive_source.py"
+
 # Three runs: [populate cache, populate cache, normal run]
-declare -a runs=("--output 100000 --time-max 0.05 --no-tofile --coffee-opt O3 --mesh-size (50.0,25.0) --mesh-spacing $h"
-                 "--output 100000 --time-max 0.05 --no-tofile --coffee-opt O3 --mesh-file $MESHES/domain1.0.msh --mesh-spacing 1.0"
-                 "-log_view --output 100000 --coffee-opt O3 --mesh-file $MESHES/domain$h.msh --mesh-spacing $h")
+declare -a runs=("$MPICMD_SN --output 100000 --time-max 0.05 --no-tofile --coffee-opt O3 --mesh-size (50.0,25.0) --mesh-spacing $h"
+                 "$MPICMD_SN --output 100000 --time-max 0.05 --no-tofile --coffee-opt O3 --mesh-file $MESHES/domain1.0.msh --mesh-spacing 1.0"
+                 "$MPICMD -log_view --output 100000 --coffee-opt O3 --mesh-file $MESHES/domain$h.msh --mesh-spacing $h")
 
 # The execution modes
 declare -a em_all=(2 3)
@@ -108,12 +104,6 @@ else
     declare -a polys=($poly)
 fi
 
-if [ -z "$np" ]; then
-    MPICMD="$MPICMD python explosive_source.py"
-else
-    MPICMD="$MPICMD -n $np python explosive_source.py"
-fi
-
 # If only logging tiling stuff, tweak a few things to run only what is strictly necessary
 if [ "$1" == "onlylog" ]; then
     declare -a polys=(1)
@@ -128,13 +118,13 @@ do
         output_file=$WORKDIR"/output_p"$poly"_h"$h"_"$nodename".txt"
         rm -f $output_file
         touch $output_file
-        PROBLEM="--poly-order $poly $run"
-        echo "    Running "$PROBLEM
+        RUN="$run --poly-order $poly"
+        echo "    Running "$RUN
 
         echo "        Untiled ..."
-        $MPICMD $PROBLEM --num-unroll 0 1>> $output_file 2>> $output_file
-        $MPICMD $PROBLEM --num-unroll 0 1>> $output_file 2>> $output_file
-        $MPICMD $PROBLEM --num-unroll 0 1>> $output_file 2>> $output_file
+        $RUN --num-unroll 0 1>> $output_file 2>> $output_file
+        $RUN --num-unroll 0 1>> $output_file 2>> $output_file
+        $RUN --num-unroll 0 1>> $output_file 2>> $output_file
 
         for p in "${partitionings[@]}"
         do
@@ -149,7 +139,7 @@ do
                     do
                         echo "        Tiled (pm="$p", ts="$ts", em="$em") ..."
                         TILING="--tile-size $ts --part-mode $p --explicit-mode $em --fusion-mode only_tile --coloring default $opt"
-                        $MPICMD $PROBLEM --num-unroll 1 $TILING 1>> $output_file 2>> $output_file
+                        $RUN --num-unroll 1 $TILING 1>> $output_file 2>> $output_file
                         if [ "$1" == "onlylog" ]; then
                             logdir=log_p"$poly"_em"$em"_part"$part"_ts"$ts"
                             mv log $logdir
