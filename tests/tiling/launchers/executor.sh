@@ -115,7 +115,7 @@ for run in "${runs[@]}"
 do
     for poly in ${polys[@]}
     do
-        output_file=$WORKDIR"/output_p"$poly"_h"$h"_"$nodename".txt"
+        output_file=$WORKDIR"/output_p"$poly"_h"$h"_"$NODENAME".txt"
         rm -f $output_file
         touch $output_file
         RUN="$run --poly-order $poly"
