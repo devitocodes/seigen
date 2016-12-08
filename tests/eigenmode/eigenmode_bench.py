@@ -105,9 +105,6 @@ if __name__ == '__main__':
                    "\tplot: Plot results from the benchmark\n")
     parser = ArgumentParser(description=description,
                             formatter_class=RawDescriptionHelpFormatter)
-    # subparsers = parser.add_subparsers(dest='mode', help="Mode of operation")
-    # parser_bench = subparsers.add_parser('bench', help='Perform benchmarking runs on target machine')
-    # parser_plot = subparsers.add_parser('plot', help='Plot diagrams from stored results')
 
     parser.add_argument(dest="mode", nargs="?", default="bench",
                         choices=["bench", "plot"], help="Execution mode")
