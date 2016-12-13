@@ -19,7 +19,6 @@ except:
 
 
 parameters["pyop2_options"]["profiling"] = True
-parameters["coffee"]["O2"] = False
 parameters["seigen"] = {}
 parameters["seigen"]["profiling"] = True
 
@@ -43,9 +42,7 @@ class EigenmodeExecutor(Executor):
             dt = 0.5 * (1.0 / size) / (2.0**(degree-1))
 
         # Set COFFEE optimisation flags
-        parameters["coffee"]["O2"] = opt >= 2
-        parameters["coffee"]["O3"] = opt >= 3
-        parameters["coffee"]["O4"] = opt >= 4
+        parameters["coffee"]["optlevel"] = 'O%d' % opt
 
         # Start PETSc performance logging
         PETSc.Log().begin()
