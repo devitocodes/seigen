@@ -332,9 +332,9 @@ class ElasticLF4(object):
                 parameters['seigen']['profiling'][stage] = {}
                 meta = parameters['seigen']['profiling'][stage]
                 for pl in trace:
-                    name = pl.kernel.name
-                    if name == "copy":
+                    if pl.kernel.name == "copy":
                         continue
+                    name = "ParLoop%s" % pl.iterset.name
                     meta[name] = {}
                     mem_b = sum([sum(arg.data.shape) * arg.data.dtype.itemsize
                                  for arg in pl.args])
