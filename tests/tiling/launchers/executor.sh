@@ -25,6 +25,16 @@ function cx1_setup {
     module load intel-suite/2016.3
     module load mpi/intel-5.1.1.109
     module load mpi4py/1.3.1
+    export CC="mpicc"
+    export MPICC="mpicc"
+    export CXX="mpicc"
+    export MPICXX="mpicc"
+    export FC="ifort"
+    export MPIFC="ifort"
+    export F77="ifort"
+    export MPIF77="ifort"
+    export F90="ifort"
+    export MPIF90="ifort"
 }
 
 function cx2_setup {
