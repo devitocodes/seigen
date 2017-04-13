@@ -172,7 +172,7 @@ class ElasticLF4(object):
 
         # Copy the velocity mass matrix into a Dat
         vmat = self.imass_velocity.handle
-        dofs_per_entity = self.U.fiat_element.entity_dofs()
+        dofs_per_entity = self.U.topological.finat_element.entity_dofs()
         dofs_per_entity = sum(self.mesh.make_dofs_per_plex_entity(dofs_per_entity))
         arity = dofs_per_entity*self.U.topological.dim
         self.velocity_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
@@ -180,14 +180,14 @@ class ElasticLF4(object):
         idxs = [PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
                                          comm=PETSc.COMM_SELF)
                 for i in range(istart, iend, arity)]
-        submats = vmat.getSubMatrices(idxs, idxs)
+        submats = vmat.createSubMatrices(idxs, idxs)
         for i, m in enumerate(submats):
             self.velocity_mass_asdat.data[i] = m[:, :].flatten()
         info("Computed velocity mass matrix")
 
         # Copy the stress mass matrix into a Dat
         smat = self.imass_stress.handle
-        dofs_per_entity = self.S.fiat_element.entity_dofs()
+        dofs_per_entity = self.S.topological.finat_element.entity_dofs()
         dofs_per_entity = sum(self.mesh.make_dofs_per_plex_entity(dofs_per_entity))
         arity = dofs_per_entity*self.S.topological.dim
         self.stress_mass_asdat = Dat(DataSet(self.mesh.cell_set, arity*arity), dtype='double')
@@ -195,7 +195,7 @@ class ElasticLF4(object):
         idxs = [PETSc.IS().createGeneral(np.arange(i, i+arity, dtype=np.int32),
                                          comm=PETSc.COMM_SELF)
                 for i in range(istart, iend, arity)]
-        submats = smat.getSubMatrices(idxs, idxs)
+        submats = smat.createSubMatrices(idxs, idxs)
         for i, m in enumerate(submats):
             self.stress_mass_asdat.data[i] = m[:, :].flatten()
         info("Computed stress mass matrix")
@@ -309,7 +309,7 @@ class ElasticLF4(object):
 
         # The number of dofs on each element is /ndofs*cdim/
         F_a_fs = F_a.function_space()
-        ndofs = F_a_fs.fiat_element.entity_dofs()
+        ndofs = F_a_fs.topological.finat_element.entity_dofs()
         ndofs = sum(self.mesh.make_dofs_per_plex_entity(ndofs))
         cdim = F_a_fs.dim
         name = 'mat_vec_mul_kernel_%s' % F_a_fs.name
