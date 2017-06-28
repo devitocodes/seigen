@@ -386,9 +386,10 @@ class ElasticLF4(object):
                     #self.s_stream << s
                     pass
 
-    def run(self, T):
-        """ Run the elastic wave simulation until t = T.
+    def run(self, T, TS=0):
+        """ Run the elastic wave simulation until t = T or ntimesteps = TS.
         :param float T: The finish time of the simulation.
+        :param float TS: The maximum number of timesteps performed; ignored if = 0.
         :returns: The final solution fields for velocity and stress.
         """
 
@@ -413,7 +414,9 @@ class ElasticLF4(object):
         start = time()
         t = self.dt
         timestep = 0
-        while t <= T + 1e-12:
+        ntimesteps = sys.maxint if TS == 0 else TS
+
+        while t <= T + 1e-12 and timestep < ntimesteps:
             if op2.MPI.COMM_WORLD.rank == 0 and timestep % self.output == 0:
                 info("t = %f, (timestep = %d)" % (t, timestep))
             with loop_chain("main1",
@@ -460,7 +463,7 @@ class ElasticLF4(object):
 
         end = time()
 
-        return start, end, self.u1, self.s1
+        return start, end, timestep, self.u1, self.s1
 
 
 # Helper stuff
@@ -510,7 +513,7 @@ def cfl_dt(dx, Vp, courant_number):
 
 class ExplosiveSourceLF4(object):
 
-    def explosive_source_lf4(self, T=2.5, Lx=300.0, Ly=150.0, h=2.5, cn=0.05,
+    def explosive_source_lf4(self, T=2.5, TS=0, Lx=300.0, Ly=150.0, h=2.5, cn=0.05,
                              mesh_file=None, output=1, poly_order=2, params=None):
 
         tile_size = params['tile_size']
@@ -590,13 +593,14 @@ class ExplosiveSourceLF4(object):
         self.elastic.s0.assign(Function(self.elastic.S).interpolate(sic))
 
         # Run the simulation
-        start, end, u1, s1 = self.elastic.run(T)
+        start, end, ntimesteps, u1, s1 = self.elastic.run(T, TS=TS)
 
         # Print runtime summary
         output_time(start, end,
                     tofile=params['tofile'],
-                    verbose=True,
+                    verbose=params['verbose'],
                     meshid=("h%s" % h).replace('.', ''),
+                    ntimesteps=ntimesteps,
                     nloops=ElasticLF4.loop_chain_length*num_unroll,
                     partitioning=part_mode,
                     tile_size=tile_size,
@@ -630,6 +634,7 @@ if __name__ == '__main__':
         'use_prefetch': args.prefetch,
         'log': args.log,
         'tofile': args.tofile,
+        'verbose': args.verbose
     }
 
     # Set the kernel optimizaation level (default: O2)
@@ -659,13 +664,14 @@ if __name__ == '__main__':
     # Set the input mesh
     if args.mesh_file:
         info("Using the unstructured mesh %s" % args.mesh_file)
-        kwargs = {'T': args.time_max, 'mesh_file': args.mesh_file, 'h': args.ms, 'cn': args.cn,
-                  'output': args.output, 'poly_order': args.poly_order, 'params': params}
+        kwargs = {'T': args.time_max, 'TS': args.timesteps_max, 'mesh_file': args.mesh_file,
+                  'h': args.ms, 'cn': args.cn, 'output': args.output, 'poly_order': args.poly_order,
+                  'params': params}
     else:
         Lx, Ly = eval(args.mesh_size)
         info("Using the structured mesh with values (Lx,Ly,h)=%s" % str((Lx, Ly, args.ms)))
-        kwargs = {'T': args.time_max, 'Lx': Lx, 'Ly': Ly, 'h': args.ms, 'output': args.output,
-                  'poly_order': args.poly_order, 'params': params}
+        kwargs = {'T': args.time_max, 'TS': args.timesteps_max, 'Lx': Lx, 'Ly': Ly, 'h': args.ms,
+                  'output': args.output, 'poly_order': args.poly_order, 'params': params}
 
     info("h=%f, courant number=%f" % (args.ms, args.cn))
 

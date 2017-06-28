@@ -3,6 +3,8 @@ import os
 import argparse
 import math
 
+import mpi4py
+
 from pyop2.mpi import MPI
 from firedrake.petsc import PETSc
 
@@ -45,6 +47,7 @@ def parser():
     p.add_argument('-cn', '--courant-number', type=float,
                    help='set the courant number', default=0.05, dest='cn')
     p.add_argument('--time-max', type=float, help='set the simulation duration', default=2.5)
+    p.add_argument('--timesteps-max', type=int, help='set max number of timesteps', default=0)
     p.add_argument('--no-tofile', help='do not store timings to file',
                    dest='tofile', action='store_false')
     # Kernel optimization
@@ -63,6 +66,7 @@ def output_time(start, end, **kwargs):
     verbose = kwargs.get('verbose', False)
     tofile = kwargs.get('tofile', False)
     meshid = kwargs.get('meshid', 'default_mesh')
+    ntimesteps = kwargs.get('ntimesteps', 0)
     nloops = kwargs.get('nloops', 0)
     tile_size = kwargs.get('tile_size', 0)
     partitioning = kwargs.get('partitioning', 'chunk')
@@ -75,6 +79,8 @@ def output_time(start, end, **kwargs):
     prefetch = 'yes' if kwargs.get('prefetch', False) else 'no'
     function_spaces = kwargs.get('function_spaces', [])
     backend = os.environ.get("SLOPE_BACKEND", "SEQUENTIAL")
+
+    name = os.path.splitext(os.path.basename(sys.argv[0]))[0]  # Cut away the extension
 
     avg = lambda v: (sum(v) / len(v)) if v else 0.0
 
@@ -147,7 +153,7 @@ def output_time(start, end, **kwargs):
     else:
         mode = "loops%d" % nloops
 
-    ### Print to file ###
+    ### Print timings to file ###
 
     def fix(values):
         new_values = []
@@ -164,7 +170,6 @@ def output_time(start, end, **kwargs):
         return tuple(new_values)
 
     if rank == 0:
-        name = os.path.splitext(os.path.basename(sys.argv[0]))[0]  # Cut away the extension
         for version in versions:
             timefile = os.path.join(output_dir, "times", name, "poly_%d" % poly_order, domain,
                                     meshid, version, platform, "np%d_nt%d.txt" % (num_procs, num_threads))
@@ -179,15 +184,29 @@ def output_time(start, end, **kwargs):
             with open(timefile, "r+") as f:
                 lines = [line.split('|') for line in f if line.strip()][2:]
                 lines = [fix(i) for i in lines]
-                lines += [(tot, ACT, ACCT, mode, tile_size, partitioning, extra_halo, glb_maps, coloring, prefetch)]
+                lines += [(tot, ACT, ACCT, ntimesteps, mode, tile_size, partitioning,
+                           extra_halo, glb_maps, coloring, prefetch)]
                 lines.sort(key=lambda x: x[0])
-                template = "| " + "%12s | " * 10
-                prepend = template % ('time', 'ACT', 'ACCT', 'mode', 'tilesize',
-                                      'partitioning', 'extrahalo', 'glbmaps', 'coloring', 'prefetch')
-                lines = "\n".join([prepend, '-'*151] + [template % i for i in lines]) + "\n"
+                template = "| " + "%9s | " * 11
+                prepend = template % ('time', 'ACT', 'ACCT', 'timesteps', 'mode', 'tilesize',
+                                      'partmode', 'extrahalo', 'glbmaps', 'coloring', 'prefetch')
+                lines = "\n".join([prepend, '-'*133] + [template % i for i in lines]) + "\n"
                 f.seek(0)
                 f.write(lines)
                 f.truncate()
+
+    ### Print DoFs summary to file ###
+
+    dofsfile = os.path.join(output_dir, "times", name, "dofs_summary.txt")
+    if rank == 0 and not os.path.exists(dofsfile):
+        with open(dofsfile, 'a') as f:
+            f.write("poly:numprocs:[fs1_dofs;fs2_dofs;...]\n")
+    tot_dofs = [MPI.COMM_WORLD.allreduce(fs.dof_count, op=mpi4py.MPI.SUM) for fs in function_spaces]
+    if rank == 0:
+        with open(dofsfile, "a") as f:
+            f.write("%d:%d:%s\n" % (poly_order, num_procs, ';'.join([str(i) for i in tot_dofs])))
+
+    ### Print summary output to screen ###
 
     if rank == 0 and verbose:
         for i in range(num_procs):

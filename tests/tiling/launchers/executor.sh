@@ -39,7 +39,8 @@ function cx1_setup {
 
 function cx2_setup {
     WORKDIR=$SCRATCH
-    MPICMD="mpiexec"
+    MPIPROCS=$(($nnodes * $2))
+    MPICMD="mpiexec -n $MPIPROCS"
     MPICMD_SN="mpiexec -n $2"
     export FIREDRAKE_TSFC_KERNEL_CACHE_DIR=$TSFC_CACHE
     export PYOP2_CACHE_DIR=$PYOP2_CACHE
@@ -66,10 +67,10 @@ elif [ "$nodename" -eq 4 ]; then
 elif [ "$nodename" -eq 5 ]; then
     cx2_setup "cx2-haswell" 24
 elif [ "$nodename" -eq 6 ]; then
-    cx2_setup "cx2-broadwell" 24
+    cx2_setup "cx2-broadwell" 28
 else
     echo "Unrecognized nodename: $nodename"
-    echo "Run as: nodename=integer h=float poly=integer executor.sh"
+    echo "Run as: nodename=integer h=float poly=integer nnodes=integer executor.sh"
     exit
 fi
 
@@ -164,5 +165,4 @@ do
 done
 
 # Copy output back to $WORKDIR
-mv $TMPDIR/output $SCRATCH
-mv $SCRATCH/output $SCRATCH/output_p$poly
+pbsdsh2 cp -r $TMPDIR/output $SCRATCH

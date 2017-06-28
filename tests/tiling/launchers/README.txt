@@ -14,7 +14,6 @@ Where X can be:
 
 And Y can be:
 
-    * populator : to populate the Firedrake cache
     * singlenode : to run the test suite on the single node Y
     * multinode : to run the test suite on a cluster of Y nodes
 
