@@ -7,6 +7,10 @@ cd $SEIGEN_DIR
 TSFC_CACHE=$FIREDRAKE_MAIN_DIR/firedrake-cache/tsfc-cache
 PYOP2_CACHE=$FIREDRAKE_MAIN_DIR/firedrake-cache/pyop2-cache
 
+# This is a pure MPI job
+export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+
 ### System-specific setup - BEGIN ###
 
 # Recognized systems: [Erebus (0), CX1-Ivy (1), CX1-Haswell (2), CX2-Westmere (3), CX2-SandyBridge (4), CX2-Haswell (5), CX2-Broadwell (6)]
@@ -86,9 +90,9 @@ MPICMD="$MPICMD python explosive_source.py"
 MPICMD_SN="$MPICMD_SN python explosive_source.py"
 
 # Three runs: [populate cache, populate cache, normal run]
-declare -a runs=("$MPICMD_SN --output 100000 --time-max 0.05 --no-tofile --coffee-opt O3 --mesh-size (50.0,25.0) --mesh-spacing $h"
-                 "$MPICMD_SN --output 100000 --time-max 0.05 --no-tofile --coffee-opt O3 --mesh-file $MESHES/domain1.0.msh --mesh-spacing 1.0"
-                 "$MPICMD -log_view --output 100000 --coffee-opt O3 --mesh-file $MESHES/domain$h.msh --mesh-spacing $h")
+declare -a runs=("$MPICMD_SN --output 100000 --timesteps-max 10 --no-tofile --coffee-opt O3 --mesh-size (50.0,25.0) --mesh-spacing $h"
+                 "$MPICMD_SN --output 100000 --timesteps-max 10 --no-tofile --coffee-opt O3 --mesh-file $MESHES/domain1.0.msh --mesh-spacing 1.0"
+                 "$MPICMD -log_view --output 100000 --coffee-opt O3 --verbose --mesh-file $MESHES/domain$h.msh --mesh-spacing $h")
 
 # The execution modes
 declare -a em_all=(2 3)
