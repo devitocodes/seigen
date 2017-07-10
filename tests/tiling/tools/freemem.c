@@ -5,7 +5,7 @@
 int main(int argc, char*argv [])
 {
 
-  long n = 1024l*1024l*1024l*25l;
+  long n = 1024l*1024l*1024l*30l;
   time_t t;
 
   srand((unsigned) time(&t));

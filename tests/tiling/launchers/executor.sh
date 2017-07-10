@@ -52,6 +52,9 @@ function cx2_setup {
     module load gcc
     module load intel-suite
     module load mpi
+
+    # Freeup DRAM on the nodes (CX2 kernel bug...)
+    $MPICMD python tools/runfreemem.py $2
 }
 
 export PYOP2_BACKEND_COMPILER=intel
