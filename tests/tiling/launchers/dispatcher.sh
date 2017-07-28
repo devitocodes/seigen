@@ -72,18 +72,19 @@ elif [ "$mode" == "multinode" ]; then
             echo "node=$node and mode=$mode not available yet"
             exit
         elif [ "$node" == "cx2-haswell" ]; then
-            qsub -v poly=$poly,h=1.0,nodename=$nodeid,nnodes=1 -l walltime=12:00:00 -l select=1:ncpus=24:mpiprocs=24:mem=96gb -q hastest launchers/executor.sh
-            qsub -v poly=$poly,h=0.707,nodename=$nodeid,nnodes=2 -l walltime=12:00:00 -l select=2:ncpus=24:mpiprocs=24:mem=96gb -q hastest launchers/executor.sh
-            qsub -v poly=$poly,h=0.5,nodename=$nodeid,nnodes=4 -l walltime=12:00:00 -l select=4:ncpus=24:mpiprocs=24:mem=96gb -q hastest launchers/executor.sh
-            qsub -v poly=$poly,h=0.354,nodename=$nodeid,nnodes=8 -l walltime=12:00:00 -l select=8:ncpus=24:mpiprocs=24:mem=96gb -q hastest launchers/executor.sh
+            qsub -v poly=$poly,h=1.0,nodename=$nodeid,nnodes=1 -l walltime=1:00:00 -l select=1:ncpus=24:mpiprocs=24:mem=124gb launchers/executor.sh
+            qsub -v poly=$poly,h=0.707,nodename=$nodeid,nnodes=2 -l walltime=1:00:00 -l select=2:ncpus=24:mpiprocs=24:mem=124gb launchers/executor.sh
+            qsub -v poly=$poly,h=0.5,nodename=$nodeid,nnodes=4 -l walltime=1:00:00 -l select=4:ncpus=24:mpiprocs=24:mem=124gb launchers/executor.sh
+            qsub -v poly=$poly,h=0.354,nodename=$nodeid,nnodes=8 -l walltime=0:10:00 -l select=18:ncpus=24:mpiprocs=24:mem=100gb launchers/executor.sh
+            qsub -v poly=$poly,h=0.25,nodename=$nodeid,nnodes=16 -l walltime=1:00:00 -l select=16:ncpus=24:mpiprocs=24:mem=124gb launchers/executor.sh
+            qsub -v poly=$poly,h=0.177,nodename=$nodeid,nnodes=32 -l walltime=1:00:00 -l select=72:ncpus=24:mpiprocs=24:mem=124gb launchers/executor.sh
         elif [ "$node" == "cx2-broadwell" ]; then
-            qsub -v poly=$poly,h=1.0,nodename=$nodeid,nnodes=1 -l walltime=12:00:00 -l select=18:ncpus=28:mpiprocs=28:mem=96gb launchers/executor.sh
-            qsub -v poly=$poly,h=0.707,nodename=$nodeid,nnodes=2 -l walltime=12:00:00 -l select=18:ncpus=28:mpiprocs=28:mem=96gb launchers/executor.sh
-            qsub -v poly=$poly,h=0.5,nodename=$nodeid,nnodes=4 -l walltime=12:00:00 -l select=18:ncpus=28:mpiprocs=28:mem=96gb launchers/executor.sh
-            qsub -v poly=$poly,h=0.354,nodename=$nodeid,nnodes=8 -l walltime=12:00:00 -l select=18:ncpus=28:mpiprocs=28:mem=96gb launchers/executor.sh
-            qsub -v poly=$poly,h=0.25,nodename=$nodeid,nnodes=16 -l walltime=12:00:00 -l select=18:ncpus=28:mpiprocs=28:mem=96gb launchers/executor.sh
-            qsub -v poly=$poly,h=0.177,nodename=$nodeid,nnodes=32 -l walltime=12:00:00 -l select=18:ncpus=28:mpiprocs=28:mem=96gb launchers/executor.sh
-            qsub -v poly=$poly,h=0.125,nodename=$nodeid,nnodes=64 -l walltime=12:00:00 -l select=18:ncpus=28:mpiprocs=28:mem=96gb launchers/executor.sh
+            qsub -v poly=$poly,h=1.0,nodename=$nodeid,nnodes=1 -l walltime=2:00:00 -l select=18:ncpus=28:mpiprocs=28:mem=124gb launchers/executor.sh
+            qsub -v poly=$poly,h=0.707,nodename=$nodeid,nnodes=2 -l walltime=2:00:00 -l select=18:ncpus=28:mpiprocs=28:mem=124gb launchers/executor.sh
+            qsub -v poly=$poly,h=0.5,nodename=$nodeid,nnodes=4 -l walltime=2:00:00 -l select=18:ncpus=28:mpiprocs=28:mem=124gb launchers/executor.sh
+            qsub -v poly=$poly,h=0.354,nodename=$nodeid,nnodes=8 -l walltime=2:00:00 -l select=18:ncpus=28:mpiprocs=28:mem=124gb launchers/executor.sh
+            qsub -v poly=$poly,h=0.25,nodename=$nodeid,nnodes=16 -l walltime=2:00:00 -l select=72:ncpus=28:mpiprocs=28:mem=124gb launchers/executor.sh
+            qsub -v poly=$poly,h=0.177,nodename=$nodeid,nnodes=32 -l walltime=2:00:00 -l select=72:ncpus=28:mpiprocs=28:mem=124gb launchers/executor.sh
         else
             echo "Cannot run multi-node experiments on $node"
             exit

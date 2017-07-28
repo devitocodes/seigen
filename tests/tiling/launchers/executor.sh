@@ -93,9 +93,10 @@ MPICMD="$MPICMD python explosive_source.py"
 MPICMD_SN="$MPICMD_SN python explosive_source.py"
 
 # Three runs: [populate cache, populate cache, normal run]
-declare -a runs=("$MPICMD_SN --output 100000 --timesteps-max 10 --no-tofile --coffee-opt O3 --mesh-size (50.0,25.0) --mesh-spacing $h"
-                 "$MPICMD_SN --output 100000 --timesteps-max 10 --no-tofile --coffee-opt O3 --mesh-file $MESHES/domain1.0.msh --mesh-spacing 1.0"
-                 "$MPICMD -log_view --output 100000 --coffee-opt O3 --verbose --mesh-file $MESHES/domain$h.msh --mesh-spacing $h")
+# WARNING: uncomment the first two lines to populate the cache !
+#declare -a runs=("$MPICMD_SN --output 100000 --timesteps-max 10 --no-tofile --coffee-opt O3 --mesh-size (50.0,25.0) --mesh-spacing $h"
+#                 "$MPICMD_SN --output 100000 --timesteps-max 10 --no-tofile --coffee-opt O3 --mesh-file $MESHES/domain1.0.msh --mesh-spacing 1.0")
+declare -a runs=("$MPICMD -log_view --output 100000 --timesteps-max 1000 --coffee-opt O3 --verbose --mesh-file $MESHES/domain$h.msh --mesh-spacing $h")
 
 # The execution modes
 declare -a em_all=(2 3)
