@@ -15,7 +15,7 @@ class ExplosiveSourceLF4():
         with timed_region('mesh generation'):
             mesh = self.generate_mesh()
             self.elastic = ElasticLF4.create(mesh, "DG", 2, dimension=2,
-                                             explicit=explicit, output=output)
+                                             solver=solver, output=output)
 
         # Constants
         self.elastic.density = 1.0
@@ -24,13 +24,13 @@ class ExplosiveSourceLF4():
 
         self.Vp = Vp(self.elastic.mu, self.elastic.l, self.elastic.density)
         self.Vs = Vs(self.elastic.mu, self.elastic.density)
-        print "P-wave velocity: %f" % self.Vp
-        print "S-wave velocity: %f" % self.Vs
+        print("P-wave velocity: %f" % self.Vp)
+        print("S-wave velocity: %f" % self.Vs)
 
         self.dx = h
         self.courant_number = 0.5
         self.elastic.dt = cfl_dt(self.dx, self.Vp, self.courant_number)
-        print "Using a timestep of %f" % self.elastic.dt  # This was previously hard-coded to be 0.001 s.
+        print("Using a timestep of %f" % self.elastic.dt)  # This was previously hard-coded to be 0.001 s.
 
         # Source
         a = 159.42
@@ -57,8 +57,4 @@ class ExplosiveSourceLF4():
 
 
 if __name__ == '__main__':
-    op2.init(log_level='WARNING')
-    from ffc.log import set_level
-    set_level('ERROR')
-
     ExplosiveSourceLF4().explosive_source_lf4(T=2.5)

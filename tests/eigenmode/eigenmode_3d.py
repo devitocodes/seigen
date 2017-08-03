@@ -19,8 +19,8 @@ class Eigenmode3DLF4():
         self.elastic.mu = 0.25
         self.elastic.l = 0.5
 
-        print "P-wave velocity: %f" % Vp(self.elastic.mu, self.elastic.l, self.elastic.density)
-        print "S-wave velocity: %f" % Vs(self.elastic.mu, self.elastic.density)
+        print("P-wave velocity: %f" % Vp(self.elastic.mu, self.elastic.l, self.elastic.density))
+        print("S-wave velocity: %f" % Vs(self.elastic.mu, self.elastic.density))
 
         self.A = sqrt(2*self.elastic.density*self.elastic.mu)
         self.O = pi*sqrt(2*self.elastic.mu/self.elastic.density)
