@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
-from elastic_wave.elastic import *
-from elastic_wave.helpers import *
+from seigen import *
 from firedrake import *
 from pyop2.profiling import timed_region
 

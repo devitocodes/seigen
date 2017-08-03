@@ -5,7 +5,7 @@ from pyop2.profiling import timed_region
 from pyop2.base import _trace
 from firedrake import *
 from firedrake.petsc import PETSc
-from elastic_wave.helpers import log
+from seigen.helpers import log
 import mpi4py
 from abc import ABCMeta, abstractmethod
 import numpy as np

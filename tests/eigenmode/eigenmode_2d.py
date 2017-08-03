@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 
 from firedrake import *
-from elastic_wave.elastic import *
-from elastic_wave.helpers import *
+from seigen import *
 
 
 class Eigenmode2DLF4():
