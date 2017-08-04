@@ -5,7 +5,8 @@ setup(
     name='seigen',
     version=versioneer.get_version(),
     cmdclass=versioneer.get_cmdclass(),
-    description="Elastic wave equation solver for seimological problems",
+    description="A finite element-based elastic wave equation solver
+    for seimological problems",
     long_descritpion="""Seigen is an elastic wave equation solver for
     seimological problems based on the Firedrake finite element
     framework. It forms part of the OPESCI seismic imaging project.""",
