@@ -5,7 +5,7 @@ from pyop2.profiling import timed_region
 from pyop2.base import _trace
 from firedrake import *
 from firedrake.petsc import PETSc
-from elastic_wave.helpers import log
+from seigen.helpers import log
 import mpi4py
 from abc import ABCMeta, abstractmethod
 import numpy as np
@@ -82,7 +82,7 @@ class ElasticLF4(object):
             self.U = VectorFunctionSpace(mesh, family, degree, name='U')
 
             # Assumes that the S and U function spaces are the same.
-            dofs = op2.MPI.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
+            dofs = self.mesh.comm.allreduce(self.S.dof_count, op=mpi4py.MPI.SUM)
             log("Number of degrees of freedom: %d" % dofs)
 
             self.s = TrialFunction(self.S)
@@ -227,12 +227,9 @@ class ElasticLF4(object):
         if self.output:
             with timed_region('i/o'):
                 if(u):
-                    self.u_stream << u
+                    self.u_stream.write(u)
                 if(s):
-                    # FIXME: Cannot currently write tensor valued fields to a VTU file.
-                    # See https://github.com/firedrakeproject/firedrake/issues/538
-                    # self.s_stream << s
-                    pass
+                    self.s_stream.write(s)
 
     @abstractmethod
     def create_solver(self, *args):

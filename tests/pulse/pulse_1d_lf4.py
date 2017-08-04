@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
-from elastic_wave.elastic import *
-from elastic_wave.helpers import *
+from seigen import *
 from firedrake import *
 from pyop2.profiling import timed_region
 
@@ -17,8 +16,8 @@ elastic.dt = 0.0025
 elastic.mu = 0.25
 elastic.l = 0.5
 
-print "P-wave velocity: %f" % Vp(elastic.mu, elastic.l, elastic.density)
-print "S-wave velocity: %f" % Vs(elastic.mu, elastic.density)
+print("P-wave velocity: %f" % Vp(elastic.mu, elastic.l, elastic.density))
+print("S-wave velocity: %f" % Vs(elastic.mu, elastic.density))
 
 F = FunctionSpace(elastic.mesh, "DG", 1)
 elastic.absorption_function = Function(F)
