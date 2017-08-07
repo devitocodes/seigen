@@ -14,10 +14,10 @@ Where X can be:
 
 And Y can be:
 
-    * singlenode : to run the test suite on the single node Y
-    * multinode : to run the test suite on a cluster of Y nodes
+    * singlenode : to run the test suite on the single X node
+    * multinode : to run the test suite on a cluster of X nodes
 
-Some combinations are not invalid:
+Some combinations are not valid:
 
     * cx2-westmere only works in singlenode mode
     * cx2-{sandyb,haswell,broadwell} only work in multinode mode
