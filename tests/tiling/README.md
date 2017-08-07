@@ -11,6 +11,6 @@ newer than:
 - Zenodo/TSFC. 2017. firedrakeproject/tsfc: The Two Stage Form Compiler firedrakeproject/tsfc: The Two Stage Form Compiler. (July 2017). DOI:https://doi.org/10.5281/zenodo.836677
 - Zenodo/UFL. 2017. firedrakeproject/ufl: The Unified Form Language. (July 2017). DOI:https://doi.org/10.5281/zenodo.836683
 
-The luncher scripts under the `launchers` directory may be used to run the
+The launcher scripts under the `launchers` directory may be used to run the
 code on the CX1/CX2 clusters at Imperial College London, or may be readapted
 to run the code on other machines.
