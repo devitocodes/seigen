@@ -10,6 +10,10 @@ from firedrake.petsc import PETSc
 
 
 def parser():
+    """
+    Used by ``explosive_source.py`` to parse user input.
+    """
+
     p = argparse.ArgumentParser(description='Run Seigen with loop tiling')
     # Tiling
     p.add_argument('-n', '--num-unroll', type=int, help='time loop unroll factor',
@@ -63,6 +67,10 @@ def parser():
 
 
 def output_time(start, end, **kwargs):
+    """
+    Used by ``explosive_source.py`` at the end of a run to record to file
+    useful information.
+    """
     verbose = kwargs.get('verbose', False)
     tofile = kwargs.get('tofile', False)
     meshid = kwargs.get('meshid', 'default_mesh')
