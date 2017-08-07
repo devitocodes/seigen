@@ -5,13 +5,7 @@ from os.path import isfile, join
 import sys
 import mpi4py
 
-
-def get_S_U_dofs(mesh, p):
-    S = TensorFunctionSpace(mesh, 'DG', p, name='S')
-    U = VectorFunctionSpace(mesh, 'DG', p, name='U')
-    S_tot_dofs = op2.MPI.comm.allreduce(S.dof_count, op=mpi4py.MPI.SUM)
-    U_tot_dofs = op2.MPI.comm.allreduce(U.dof_count, op=mpi4py.MPI.SUM)
-    return S_tot_dofs, U_tot_dofs
+from seigen.helpers import get_dofs
 
 
 def print_info(mesh, sd, p, cells, U_tot_dofs, S_tot_dofs):
@@ -49,7 +43,7 @@ for p in poly:
         for h in all_h:
             mesh = RectangleMesh(int(Lx/h), int(Ly/h), Lx, Ly)
             mesh.topology.init(s_depth=sd)
-            S_tot_dofs, U_tot_dofs = get_S_U_dofs(mesh, p)
+            S_tot_dofs, U_tot_dofs = get_dofs(mesh, p)
             print_info(str((Lx, Ly, h)), sd, p, mesh.num_cells(), U_tot_dofs, S_tot_dofs)
 
 
@@ -67,5 +61,5 @@ for p in poly:
         for m in meshes:
             mesh = Mesh(join(meshes_dir, m))
             mesh.topology.init(s_depth=sd)
-            S_tot_dofs, U_tot_dofs = get_S_U_dofs(mesh, p)
+            S_tot_dofs, U_tot_dofs = get_dofs(mesh, p)
             print_info(m, sd, p, mesh.num_cells(), U_tot_dofs, S_tot_dofs)
