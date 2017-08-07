@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 
 from firedrake import *
-from elastic_wave.elastic import *
-from elastic_wave.helpers import *
+from seigen import *
 
 with timed_region('mesh setup'):
-   mesh = Mesh("src/domain.msh")
-elastic = ElasticLF4(mesh, "DG", 1, dimension=3)
+    mesh = Mesh("src/domain.msh")
+elastic = ElasticLF4.create(mesh, "DG", 1, dimension=3)
 
 # Constants
 C = FunctionSpace(mesh, "CG", 1)
@@ -16,10 +15,10 @@ elastic.dt = 0.001
 elastic.mu = Function(C).interpolate(Expression("x[2] >= 1000 ? 10.4e9 : 32.4e9"))
 elastic.l = Function(C).interpolate(Expression("x[2] >= 1000 ? 20.8e9 : 32.4e9"))
 
-print "P-wave velocity in Medium 1: %f" % Vp(10.4e9, 20.8e9, 2600)
-print "S-wave velocity in Medium 1: %f" % Vs(10.4e9, 2600)
-print "P-wave velocity in Medium 2: %f" % Vp(32.4e9, 32.4e9, 2700)
-print "S-wave velocity in Medium 2: %f" % Vs(32.4e9, 2700)
+print("P-wave velocity in Medium 1: %f" % Vp(10.4e9, 20.8e9, 2600))
+print("S-wave velocity in Medium 1: %f" % Vs(10.4e9, 2600))
+print("P-wave velocity in Medium 2: %f" % Vp(32.4e9, 32.4e9, 2700))
+print("S-wave velocity in Medium 2: %f" % Vs(32.4e9, 2700))
 
 # Source
 smoothness = 0.1
