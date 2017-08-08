@@ -52,3 +52,16 @@ def cfl_dt(dx, Vp, courant_number):
     :rtype: float
     """
     return (courant_number*dx)/Vp
+
+
+def get_dofs(mesh, p):
+    r""" Compute the total number of degrees of freedom for the stress and velocity fields when running over MPI.
+
+    :param mesh: Any Firedrake-compatible mesh.
+    :param p: The polynomial order of the function spaces.
+    """
+    S = TensorFunctionSpace(mesh, 'DG', p, name='S')
+    U = VectorFunctionSpace(mesh, 'DG', p, name='U')
+    S_tot_dofs = op2.MPI.comm.allreduce(S.dof_count, op=mpi4py.MPI.SUM)
+    U_tot_dofs = op2.MPI.comm.allreduce(U.dof_count, op=mpi4py.MPI.SUM)
+    return S_tot_dofs, U_tot_dofs
