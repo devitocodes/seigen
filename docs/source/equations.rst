@@ -20,6 +20,16 @@ The stress tensor :math:`\mathbb{T}` is defined as
 
 where :math:`\mathbb{I}` is the identity tensor, and :math:`\lambda` and :math:`\mu` are the two Lame parameters.
 
+Absorption term
+~~~~~~~~~~~~~~~
+
+An optional sponge/absorption region can be specified through an additional term, :math:`-\sigma\mathbf{u}`, added to the velocity equation.
+
+Source term
+~~~~~~~~~~~~~~~
+
+An optional source can be specified through an additional term, :math:`\mathbf{S}`, added to the velocity equation.
+
 Initial conditions
 ------------------
 
