@@ -13,6 +13,8 @@ Contents:
 
    introduction
    equations
+   solvers
+   example
 
 Indices and tables
 ==================
