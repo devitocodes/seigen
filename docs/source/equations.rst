@@ -26,7 +26,7 @@ Absorption term
 An optional sponge/absorption region can be specified through an additional term, :math:`-\sigma\mathbf{u}`, added to the velocity equation.
 
 Source term
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~
 
 An optional source can be specified through an additional term, :math:`\mathbf{S}`, added to the velocity equation.
 
