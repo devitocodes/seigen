@@ -13,7 +13,7 @@ Contents:
 
    introduction
    equations
-   solvers
+   discretisation
    example
 
 Indices and tables
