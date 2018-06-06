@@ -1,0 +1,17 @@
+{
+  "@context": "https://raw.githubusercontent.com/mbjones/codemeta/master/codemeta.jsonld",
+  "@type": "Code",
+  "author": [
+
+  ],
+  "identifier": "",
+  "codeRepository": "https://github.com/opesci/seigen",
+  "datePublished": "2018-06-06",
+  "dateModified": "2018-06-06",
+  "dateCreated": "2018-06-06",
+  "description": "Seigen is a finite element-based elastic wave equation solver for seimological problems.",
+  "keywords": "seismology, seismic modelling, numerical modelling, code generation, finite element method, elastic wave equation",
+  "license": "MIT",
+  "title": "Seigen",
+  "version": "v0.9-beta"
+}
