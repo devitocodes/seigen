@@ -24,7 +24,7 @@ pip install -e seigen
 
 ## Documentation
 
-The documentation can be built by navigating to the `docs` directory and running `make html` at the command line. A new `build` folder will be created containing the documentation in HTML format.
+The documentation can be built by navigating to the `docs` directory and running `make html` at the command line. A new `build` folder will then be created containing the documentation in HTML format. An example of how to set up a simulation in Seigen is included along with details on the model equations and the discretisation and solution procedure.
 
 ## Licence
 
