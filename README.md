@@ -30,7 +30,7 @@ Details regarding the model equations and the discretisation and solution proced
 
 ## Licence
 
-Seigen is open-source software and is released under the [MIT License](https://opensource.org/licenses/MIT). See the file ``LICENSE.md`` for more information.
+Seigen is open-source software and is released under the [MIT License](https://opensource.org/licenses/MIT). See the file `LICENSE.md` for more information.
 
 ## Contact
 

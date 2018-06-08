@@ -23,11 +23,13 @@ authors:
 affiliations:
  - name: Imperial College London
    index: 1
-date: 6 June 2018
+date: 8 June 2018
 bibliography: paper.bib
 ---
 
 # Summary
+
+## Motivation behind code generation
 
 Seismological modelling has traditionally involved the use of finite difference methods (FDMs) to solve the equations governing the propagation of acoustic and elastic waves [@Kelly_etal_1976, @Virieux_1986, @Graves_1996]. Such methods are relatively easy to implement, and direct addressing and regular memory access patterns means that good performance can be readily achieved [@Liu_etal_2014]. Therefore, a lot of effort has focused on optimising these models for use in seismic imaging on a wide range of hardware architectures.
 
@@ -41,7 +43,13 @@ Code generation techniques provided by the FEniCS framework [@Logg_etal_2012, @L
 
 In addition to many-core CPUs, the field of seismic modelling has already begun to benefit from using more exotic hardware architectures such as GPUs [@WeissShragge_2013]. In the case of the Firedrake framework, the code generation workflow allows the model code to be targeted towards a particular hardware architecture using the PyOP2 library [@Rathgeber_etal_2012, @Markall_etal_2013], thereby future-proofing the model in the face of future high-performance computer architectures.
 
-Seigen is one of the first known application of code generation techniques to high-order, finite element-based seismological modelling.
+## Seigen
+
+Seigen is one of the first known applications of code generation techniques to high-order, finite element-based seismological modelling. The elastic wave equation and its discretisation procedure are implemented in the high-level UFL domain-specific language, which does not need to be modified by the user. Setting up a simulation simply requires writing a short Python-based problem description file; this file imports Seigen's elastic wave solver module and specifies, for example, constants such as the Lame parameters and the timestep size, initial conditions, and a source/absorption term. The user can also select an arbitrary-order function space for the spatial discretisation, and a fourth-order leapfrog algorithm advances the equations forward in time.
+
+Upon execution of this problem description file, the Firedrake automated modelling framework converts the weak formulation of the governing equations and any additional expressions (e.g. for the user-specified initial conditions, source term, etc) into several C kernels which are then compiled and executed efficiently in parallel over the computational mesh to perform the simulation. All solution fields are written out in the VTK format [@Schroeder_etal_2006] for visualisation with tools such as ParaView [@Ayachit_2015].
+
+The source code is available on GitHub (https://github.com/opesci/seigen) and has been released under the MIT License.
 
 # Acknowledgements
 
